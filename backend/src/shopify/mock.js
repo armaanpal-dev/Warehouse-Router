@@ -118,6 +118,12 @@ export function createMockShopify({ catalogue = MOCK_CATALOGUE, latencyMs = 0 } 
       throw new ShopifyError('fulfillmentOrderMove: fulfillment order not found');
     },
 
+    async listOrdersSince(sinceIso) {
+      await gate('listOrdersSince');
+      const since = Date.parse(sinceIso);
+      return [...orders.values()].map((o) => structuredClone(o.payload)).filter((p) => Date.parse(p.created_at) >= since);
+    },
+
     async addOrderTags(orderGid, newTags) {
       await gate('addOrderTags');
       tags.set(orderGid, [...new Set([...(tags.get(orderGid) || []), ...newTags])]);
@@ -159,8 +165,7 @@ export function createMockShopify({ catalogue = MOCK_CATALOGUE, latencyMs = 0 } 
           if (!left) break;
         }
       }
-      orders.set(orderGid, { fos: [...fosByLoc.values()], cancelled: false });
-      return {
+      const payload = {
         id: orderNum,
         admin_graphql_api_id: orderGid,
         name: name || `#MOCK${orderNum}`,
@@ -170,16 +175,20 @@ export function createMockShopify({ catalogue = MOCK_CATALOGUE, latencyMs = 0 } 
         note_attributes: [],
         line_items: lineItems.map(({ itemId, ...li }) => li),
       };
+      orders.set(orderGid, { fos: [...fosByLoc.values()], cancelled: false, payload });
+      return structuredClone(payload);
     },
 
     /** Cancel an order the way Shopify would and return the orders/cancelled webhook payload. */
     cancelOrder(payload) {
       const o = orders.get(payload.admin_graphql_api_id);
+      const cancelledAt = new Date().toISOString();
       if (o && !o.cancelled) {
         o.cancelled = true;
+        o.payload.cancelled_at = cancelledAt;
         for (const fo of o.fos) for (const li of fo.lineItems) adjust(li.itemId, fo.locationId, li.remainingQuantity);
       }
-      return { ...payload, cancelled_at: new Date().toISOString(), cancel_reason: 'customer' };
+      return { ...payload, cancelled_at: cancelledAt, cancel_reason: 'customer' };
     },
 
     /** Physical stock change outside this service (a stock count, a return) — for discrepancy tests. */

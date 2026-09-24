@@ -101,6 +101,34 @@ export function createShopifyService(request) {
       return r.movedFulfillmentOrder;
     },
 
+    /**
+     * Orders created since `sinceIso`, oldest first, in the same shape as the orders/create webhook
+     * payload, so a missed order can go through exactly the same allocation path.
+     */
+    async listOrdersSince(sinceIso) {
+      const out = [];
+      let after = null;
+      do {
+        const data = await request(
+          `query Recent($q: String!, $after: String) {
+            orders(first: 50, after: $after, query: $q, sortKey: CREATED_AT) {
+              nodes {
+                id legacyResourceId name createdAt cancelledAt
+                shippingAddress { zip } billingAddress { zip }
+                customAttributes { key value }
+                lineItems(first: 100) { nodes { id quantity unfulfilledQuantity requiresShipping variant { legacyResourceId } } }
+              }
+              pageInfo { hasNextPage endCursor }
+            }
+          }`,
+          { q: `created_at:>='${sinceIso}'`, after },
+        );
+        for (const o of data.orders.nodes) out.push(toWebhookShape(o));
+        after = data.orders.pageInfo.hasNextPage ? data.orders.pageInfo.endCursor : null;
+      } while (after);
+      return out;
+    },
+
     async addOrderTags(orderGid, tags) {
       const data = await request(
         `mutation Tag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { field message } } }`,
@@ -109,5 +137,29 @@ export function createShopifyService(request) {
       const errs = data.tagsAdd.userErrors;
       if (errs.length) throw new ShopifyError(`tagsAdd: ${errs.map((e) => e.message).join('; ')}`);
     },
+  };
+}
+
+const numeric = (gid) => Number(String(gid).split('/').pop());
+
+/** GraphQL Order -> the REST/webhook fields orders.js reads. */
+function toWebhookShape(o) {
+  return {
+    id: Number(o.legacyResourceId),
+    admin_graphql_api_id: o.id,
+    name: o.name,
+    created_at: o.createdAt,
+    cancelled_at: o.cancelledAt,
+    shipping_address: o.shippingAddress ? { zip: o.shippingAddress.zip } : null,
+    billing_address: o.billingAddress ? { zip: o.billingAddress.zip } : null,
+    note_attributes: o.customAttributes.map((a) => ({ name: a.key, value: a.value })),
+    line_items: o.lineItems.nodes.map((li) => ({
+      id: numeric(li.id),
+      variant_id: li.variant ? Number(li.variant.legacyResourceId) : null,
+      quantity: li.quantity,
+      fulfillable_quantity: li.unfulfilledQuantity,
+      requires_shipping: li.requiresShipping,
+      fulfillment_status: li.unfulfilledQuantity === 0 ? 'fulfilled' : null,
+    })),
   };
 }

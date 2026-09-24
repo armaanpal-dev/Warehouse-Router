@@ -206,3 +206,28 @@ test('orders with no serviceable pincode go to review, and consume no stock', as
   assert.equal(o.status, 'needs_review');
   assert.equal(o.allocations[0].status, 'unallocated');
 });
+
+test('catch-up recovers orders whose webhook never arrived, and skips ones already handled', async () => {
+  // Server was down: Shopify took two orders (one later cancelled) and no webhook reached us.
+  const missed = t.shopify.createOrder({ pincode: '560001', lines: [{ variant_id: '46001', quantity: 1 }] });
+  const cancelled = t.shopify.cancelOrder(t.shopify.createOrder({ pincode: '110001', lines: [{ variant_id: '46006', quantity: 1 }] }));
+  // A third one did arrive normally.
+  const seen = t.shopify.createOrder({ pincode: '400001', lines: [{ variant_id: '46006', quantity: 1 }] });
+  await send(seen, 'orders/create');
+  await processed(seen.id);
+
+  const res = await t.post('/api/admin/catch-up', {}, { 'X-Api-Key': ADMIN_KEY });
+  const r = await res.json();
+  assert.equal(r.checked, 3);
+  assert.deepEqual(r.recovered.map((o) => [o.order_id, o.status]), [[String(missed.id), 'allocated'], [String(cancelled.id), 'cancelled']]);
+
+  await t.ctx.outbox.drain();
+  assert.deepEqual(t.shopify.getTags(missed.admin_graphql_api_id), ['warehouse-BLR']);
+  assert.deepEqual(t.shopify.getTags(cancelled.admin_graphql_api_id), []);
+
+  // Shopify's retry of the missed webhook arriving afterwards is a no-op, and so is a second run.
+  const late = await send(missed, 'orders/create');
+  assert.equal(late.status, 200);
+  assert.equal((await t.ctx.catchUp.run()).recovered.length, 0);
+  assert.equal(t.ctx.orders.get(missed.id).allocations.length, 1);
+});

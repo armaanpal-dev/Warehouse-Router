@@ -9,7 +9,7 @@ import { createInventoryService } from './services/inventory.js';
 import { createAvailabilityService } from './services/availability.js';
 import { createOutbox } from './services/outbox.js';
 import { createOrderService } from './services/orders.js';
-import { registerJobs, createReconciler } from './services/jobs.js';
+import { registerJobs, createReconciler, createCatchUp } from './services/jobs.js';
 import { createWebhookProcessor, verifyWebhookHmac } from './services/webhooks.js';
 import { toGid } from './shopify/ids.js';
 
@@ -31,8 +31,9 @@ export function createContext(config, { logger, shopify, db } = {}) {
   const orders = createOrderService({ db, inventory, outbox, shopify, logger });
   const webhooks = createWebhookProcessor({ db, orders, logger });
   const reconciler = createReconciler({ inventory, logger });
+  const catchUp = createCatchUp({ shopify, orders, logger, windowMs: config.catchUpWindowMs ?? 72 * 3600_000 });
   const checkAvailability = createAvailabilityService({ inventory });
-  return { config, db, shopify, inventory, outbox, orders, webhooks, reconciler, checkAvailability, logger };
+  return { config, db, shopify, inventory, outbox, orders, webhooks, reconciler, catchUp, checkAvailability, logger };
 }
 
 export function createApp(ctx) {
@@ -95,6 +96,7 @@ export function createApp(ctx) {
     res.json({ variant: v, ledger: v.tracked ? ctx.inventory.ledger(v.inventoryItemId) : null, in_flight: ctx.inventory.hasPending(v.inventoryItemId) });
   });
   admin.post('/reconcile', async (req, res) => res.json(await ctx.reconciler.run()));
+  admin.post('/catch-up', async (req, res) => res.json(await ctx.catchUp.run()));
   admin.get('/discrepancies', (req, res) => res.json(ctx.db.prepare('SELECT * FROM discrepancies ORDER BY id DESC LIMIT 100').all()));
   admin.get('/outbox', (req, res) => res.json(ctx.outbox.list(req.query.status || 'dead')));
   admin.post('/outbox/:id/retry', (req, res) => {

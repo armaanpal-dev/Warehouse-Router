@@ -33,6 +33,7 @@ export function loadConfig(env = process.env, { envFile = '.env', requireLocatio
     inventoryCacheMs: num('INVENTORY_CACHE_MS', 10_000),
     staleMaxMs: num('STALE_MAX_MS', 300_000),
     reconcileIntervalMs: num('RECONCILE_INTERVAL_MS', 300_000),
+    catchUpWindowMs: num('CATCHUP_WINDOW_MS', 72 * 3600_000),
     rateLimitPerMinute: num('RATE_LIMIT_PER_MINUTE', 60),
   };
 

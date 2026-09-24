@@ -24,7 +24,7 @@ routes the order to the right warehouse in Shopify, and releases stock on cancel
 cd backend
 npm install
 cp .env.example .env          # set SHOPIFY_API_SECRET and ADMIN_API_KEY to long random strings
-npm test                      # 29 tests: routing, availability, webhooks, concurrency, failures, regressions
+npm test                      # 30 tests: routing, availability, webhooks, concurrency, failures, regressions
 npm start                     # http://127.0.0.1:3000 (PORT in .env)
 ```
 
@@ -84,6 +84,7 @@ real in that mode, so post signed test webhooks with `scripts/send-webhook.js`.
 | GET | `/api/admin/orders/:id` | `X-Api-Key` | The allocation recorded for an order |
 | GET | `/api/admin/stock/:variantId` | `X-Api-Key` | The ledger per warehouse for a variant, and whether a Shopify write is still in flight |
 | POST | `/api/admin/reconcile` | `X-Api-Key` | Compare every tracked item with Shopify now |
+| POST | `/api/admin/catch-up` | `X-Api-Key` | Allocate and tag any order from the last 72 h whose webhook never arrived |
 | GET | `/api/admin/discrepancies` | `X-Api-Key` | Ledger-vs-Shopify differences found |
 | GET | `/api/admin/outbox?status=dead` | `X-Api-Key` | Shopify writes that failed permanently |
 | POST | `/api/admin/outbox/:id/retry` | `X-Api-Key` | Requeue a dead write |
@@ -207,6 +208,17 @@ webhooks, allocated, and written back to Shopify.
 |---|---|---|---|
 | **#1006** | Silver / 8 Ltr ×1 → 110003 (Delhi) | Primary DEL has stock → `allocated`, DEL 1 | Ships from **Delhi Warehouse**, tag `warehouse-DEL` |
 | **#1007** | Silver / 12 Ltr ×7 → 110003 (Delhi) | DEL has only 2 → **split** DEL 2 + BOM 5 | Fulfillment orders at **Delhi (2)** and **Mumbai (5)**, tags `warehouse-DEL`, `warehouse-BOM` |
+| **#1008** | ×1 → 110003 (Delhi) | Placed while the server was down; **recovered by catch-up** on restart → DEL 1 | Tag `warehouse-DEL` |
+| **#1009** | ×9 → 110003 (Delhi) | Placed while the server was down; recovered by catch-up → **split** DEL 3 + BOM 3 + BLR 3 | Tags `warehouse-DEL`, `warehouse-BOM`, `warehouse-BLR` |
+
+**Missed webhooks, found by #1008 and #1009.** Both were placed while the server and tunnel were stopped,
+so no webhook reached us and the orders had no warehouse tag. Shopify retries a failed delivery for a
+while and then gives up, so waiting is not a fix. The server now runs a **catch-up** (`createCatchUp` in
+`src/services/jobs.js`) on boot and every 5 minutes: it lists the last 72 hours of orders from Shopify
+(`listOrdersSince` in `src/shopify/service.js`, mapped to the webhook payload shape) and sends any order it
+has no record of through the same `allocate()`. A webhook that arrives at the same moment is harmless:
+`allocate()` re-checks the order id inside its transaction. On restart it recovered #1008 and #1009 and
+tagged both.
 
 How to check an order yourself:
 ```bash
@@ -305,6 +317,9 @@ orders from both being routed to the *same warehouse* for its last unit. That's 
 - **Failures.** If Shopify is down while an event is processed, the event is marked `failed` and a sweeper
   retries it with exponential backoff (up to 6 attempts). Events accepted just before a crash are picked
   up on boot.
+- **Webhooks that never arrive** (server or tunnel down longer than Shopify keeps retrying): the catch-up
+  job lists the last 72 h of orders from Shopify, on boot and every 5 minutes, and allocates any it has no
+  record of. Window: `CATCHUP_WINDOW_MS`.
 - **Cancellation** releases every unfulfilled allocation back to the warehouse it came from. Lines
   already `fulfilled` stay consumed; restocking those is a returns/refund concern. It also cancels any
   pending routing job, and queues a resync from Shopify, which releases its own commitment on cancel.
@@ -375,7 +390,7 @@ scripts/
   register-webhooks.js point orders/create + orders/cancelled at a public URL (idempotent)
   sync-locations.js    find the warehouse location GIDs for .env
   send-webhook.js      send correctly signed test webhooks (mock demo, replays)
-test/                  node:test suites, 29 tests (npm test)
+test/                  node:test suites, 30 tests (npm test)
 ```
 
 Store setup scripts (they created the demo data) are in `../scripts/`:

@@ -78,7 +78,7 @@
 
       this.picker?.addEventListener('change', (e) => this.onOptionChange(e));
       this.form.addEventListener('submit', (e) => this.onSubmit(e));
-      this.querySelector('[data-quantity-input]').addEventListener('input', () => this.announce());
+      this.querySelector('[data-quantity-input]')?.addEventListener('input', () => this.announce());
       this.querySelectorAll('[data-thumb]').forEach((b) =>
         b.addEventListener('click', () => this.showMedia(b.dataset.thumb))
       );
@@ -166,6 +166,7 @@
 
     renderPrice(v) {
       const el = this.querySelector('[data-price]');
+      if (!el) return; // price block removed in the editor
       const money = (c) => formatMoney(c, this.moneyFormat);
       const onSale = v.compareAtPrice > v.price;
       el.innerHTML = `<span class="cp-price__current${onSale ? ' is-sale' : ''}">${money(v.price)}</span>` +
@@ -182,6 +183,7 @@
         sku.querySelector('[data-sku-value]').textContent = v.sku || '';
       }
       const stock = this.querySelector('[data-stock]');
+      if (!stock) return; // inventory block removed in the editor
       stock.className = 'cp__stock';
       if (!v.available) {
         stock.textContent = 'Out of stock';
@@ -196,6 +198,7 @@
     }
 
     renderButton(v) {
+      if (!this.addButton) return; // buy buttons block removed in the editor
       this.addButton.disabled = !v.available;
       this.addLabel.textContent = v.available ? 'Add to cart' : 'Sold out';
     }
@@ -218,7 +221,7 @@
       if (!v.available) return this.showError('This variant is sold out.');
       if (!window.CustomCart) return this.form.submit(); // no-JS drawer: plain form post to /cart/add
 
-      const quantity = this.stepper.value;
+      const quantity = this.stepper?.value || 1;
       this.setLoading(true);
       try {
         await window.CustomCart.add([{ id: v.id, quantity }], { opener: this.addButton });
@@ -235,8 +238,8 @@
       if (on) this.addButton.disabled = true;
       else this.renderButton(this.variant);
     }
-    showError(msg) { this.errorEl.textContent = msg; this.errorEl.hidden = false; }
-    hideError() { this.errorEl.hidden = true; this.errorEl.textContent = ''; }
+    showError(msg) { if (!this.errorEl) return; this.errorEl.textContent = msg; this.errorEl.hidden = false; }
+    hideError() { if (!this.errorEl) return; this.errorEl.hidden = true; this.errorEl.textContent = ''; }
   }
   if (!customElements.get('product-page')) customElements.define('product-page', ProductPage);
 

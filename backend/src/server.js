@@ -9,8 +9,13 @@ const app = createApp(ctx);
 
 ctx.outbox.start(2000);
 const sweeper = setInterval(() => ctx.webhooks.sweep().catch((e) => logger.error('sweep.failed', { error: e.message })), 5000);
-const reconcile = setInterval(() => ctx.reconciler.run().catch((e) => logger.error('reconcile.failed', { error: e.message })), config.reconcileIntervalMs);
+const catchUp = () => ctx.catchUp.run().catch((e) => logger.error('catchup.failed', { error: e.message }));
+const reconcile = setInterval(() => {
+  ctx.reconciler.run().catch((e) => logger.error('reconcile.failed', { error: e.message }));
+  catchUp();
+}, config.reconcileIntervalMs);
 ctx.webhooks.sweep().catch(() => {}); // pick up anything accepted before a restart
+catchUp(); // and any order whose webhook never reached us while we were down
 
 const server = app.listen(config.port, () => {
   logger.info('server.listening', { port: config.port, shopifyMode: config.shopify.mode, shop: config.shopify.shop });

@@ -36,7 +36,9 @@ product-page, pincode-checker { display: block; }
 .cp-price__compare { font-size: 1.6rem; color: var(--cp-muted); }
 .cp-price__badge { font-size: 1.2rem; font-weight: 600; padding: 0.2rem 0.8rem; border-radius: 99px; background: #e8f5ec; color: var(--cp-ok); }
 .cp__tax { margin: 0.4rem 0 0; font-size: 1.3rem; color: var(--cp-muted); }
-.cp__form { margin-top: 2.4rem; }
+/* The form is an empty target (buttons use form=""); spacing is on the blocks around it. */
+.cp__picker { margin-top: 2.4rem; }
+.cp__info > .cp__meta:not(.cp__picker + .cp__meta) { margin-top: 2.4rem; }
 
 /* ---------- Variant picker ---------- */
 .cp-variants__group { border: 0; margin: 0 0 2rem; padding: 0; min-width: 0; }

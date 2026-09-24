@@ -55,6 +55,37 @@ export function registerJobs({ outbox, shopify, inventory, logger }) {
   });
 }
 
+/**
+ * Catch-up for missed webhooks. Shopify gives up on a webhook after its retries run out, so an order
+ * placed while this server (or its tunnel) was down would otherwise never be routed or tagged. This
+ * lists recent orders from Shopify and feeds any we have no record of through the normal allocate()
+ * path. Safe to overlap with live webhooks: allocate() re-checks the order id inside its transaction.
+ */
+export function createCatchUp({ shopify, orders, logger, windowMs, now = Date.now }) {
+  let running = false;
+  async function run() {
+    if (running) return { skipped: true };
+    running = true;
+    try {
+      const since = new Date(now() - windowMs).toISOString();
+      const recent = await shopify.listOrdersSince(since);
+      const recovered = [];
+      for (const order of recent) {
+        if (orders.get(order.id)) continue;
+        // A cancelled order we never saw has nothing to release; recording it still stops a late
+        // orders/create delivery from allocating it.
+        const r = order.cancelled_at ? orders.cancel(order) : await orders.allocate(order);
+        if (!r.duplicate) recovered.push({ order_id: String(order.id), name: order.name, status: r.status });
+      }
+      if (recovered.length) logger?.warn('catchup.recovered', { count: recovered.length, orders: recovered.map((o) => o.name) });
+      return { checked: recent.length, since, recovered };
+    } finally {
+      running = false;
+    }
+  }
+  return { run };
+}
+
 /** Periodic reconciliation: Shopify vs ledger for every item we track. Returns what changed. */
 export function createReconciler({ inventory, logger }) {
   let running = false;

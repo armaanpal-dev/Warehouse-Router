@@ -1,8 +1,13 @@
 {%- comment -%}
-  Custom product section: gallery, variant picker, quantity, AJAX add-to-cart, pincode checker.
+  Custom product section: gallery on the left, a block-driven info column on the right (vendor, title,
+  price, variant picker, inventory, buy buttons, pincode checker, description, text, app blocks), so the
+  column can be reordered and trimmed in the theme editor.
   Works for any product: on a product template it uses that product; anywhere else (e.g. the homepage)
   it uses the "Product" setting. Behaviour lives in assets/custom-product.js; the cart drawer is
   sections/custom-cart-drawer.liquid + assets/custom-cart.js.
+
+  The add-to-cart <form> sits outside the blocks and the buy-buttons block points at it with form="",
+  so the picker, quantity and button can be placed in any order.
 {%- endcomment -%}
 {%- liquid
   assign is_product_page = false
@@ -20,7 +25,12 @@
 {%- liquid
   assign current_variant = product.selected_or_first_available_variant
   assign form_id = 'product-form-' | append: section.id
-  assign low_stock = section.settings.low_stock_threshold
+  assign low_stock = 0
+  for block in section.blocks
+    if block.type == 'inventory'
+      assign low_stock = block.settings.low_stock_threshold
+    endif
+  endfor
 -%}
 
 <product-page
@@ -85,24 +95,8 @@
       {%- endif -%}
     </div>
 
-    {%- comment -%} ---------- Info ---------- {%- endcomment -%}
+    {%- comment -%} ---------- Info (blocks) ---------- {%- endcomment -%}
     <div class="cp__info">
-      {%- if product.vendor != blank -%}
-        <p class="cp__vendor">{{ product.vendor | escape }}</p>
-      {%- endif -%}
-      {%- if is_product_page -%}
-        <h1 class="cp__title">{{ product.title | escape }}</h1>
-      {%- else -%}
-        <h2 class="cp__title"><a href="{{ product.url }}">{{ product.title | escape }}</a></h2>
-      {%- endif -%}
-
-      <div class="cp__price" data-price aria-live="polite">
-        {%- render 'custom-price', variant: current_variant -%}
-      </div>
-      {%- if cart.taxes_included -%}
-        <p class="cp__tax">Tax included.</p>
-      {%- endif -%}
-
       <form
         id="{{ form_id }}"
         class="cp__form"
@@ -113,80 +107,121 @@
         data-product-form
       >
         <input type="hidden" name="id" value="{{ current_variant.id }}" data-variant-input>
-
-        {%- unless product.has_only_default_variant -%}
-          {%- render 'custom-variant-picker', product: product, current_variant: current_variant, section: section -%}
-        {%- endunless -%}
-
-        <p class="cp__meta">
-          {%- if section.settings.show_sku -%}
-            <span data-sku {% if current_variant.sku == blank %}hidden{% endif %}>SKU: <span data-sku-value>{{ current_variant.sku }}</span></span>
-          {%- endif -%}
-          <span class="cp__stock" data-stock></span>
-        </p>
-
-        <div class="cp__buy">
-          <div class="cp__qty">
-            <label class="visually-hidden" for="Quantity-{{ section.id }}">{{ 'products.product.quantity.label' | t }}</label>
-            <quantity-stepper class="qty">
-              <button type="button" class="qty__btn" data-step="-1" aria-label="{{ 'products.product.quantity.decrease' | t: product: product.title | escape }}">
-                <span class="svg-wrapper">{{ 'icon-minus.svg' | inline_asset_content }}</span>
-              </button>
-              <input
-                id="Quantity-{{ section.id }}"
-                class="qty__input"
-                type="number"
-                name="quantity"
-                value="1"
-                min="1"
-                inputmode="numeric"
-                data-quantity-input
-              >
-              <button type="button" class="qty__btn" data-step="1" aria-label="{{ 'products.product.quantity.increase' | t: product: product.title | escape }}">
-                <span class="svg-wrapper">{{ 'icon-plus.svg' | inline_asset_content }}</span>
-              </button>
-            </quantity-stepper>
-          </div>
-
-          <button
-            type="submit"
-            name="add"
-            class="cp__atc button button--primary"
-            data-add-button
-            {% unless current_variant.available %}disabled{% endunless %}
-          >
-            <span data-add-label>
-              {%- if current_variant.available -%}
-                {{ 'products.product.add_to_cart' | t }}
-              {%- else -%}
-                {{ 'products.product.sold_out' | t }}
-              {%- endif -%}
-            </span>
-            <span class="cp__spinner" aria-hidden="true"></span>
-          </button>
-        </div>
-        <p class="cp__form-error" role="alert" data-form-error hidden></p>
       </form>
-
-      {%- if section.settings.enable_pincode -%}
-        {%- render 'custom-pincode-checker', section: section, product: product, current_variant: current_variant -%}
-      {%- endif -%}
 
       {%- for block in section.blocks -%}
         {%- case block.type -%}
           {%- when '@app' -%}
             {% render block %}
+
+          {%- when 'vendor' -%}
+            {%- if product.vendor != blank -%}
+              <p class="cp__vendor" {{ block.shopify_attributes }}>{{ product.vendor | escape }}</p>
+            {%- endif -%}
+
+          {%- when 'title' -%}
+            {%- if is_product_page -%}
+              <h1 class="cp__title" {{ block.shopify_attributes }}>{{ product.title | escape }}</h1>
+            {%- else -%}
+              <h2 class="cp__title" {{ block.shopify_attributes }}><a href="{{ product.url }}">{{ product.title | escape }}</a></h2>
+            {%- endif -%}
+
+          {%- when 'price' -%}
+            <div {{ block.shopify_attributes }}>
+              <div class="cp__price" data-price aria-live="polite">
+                {%- render 'custom-price', variant: current_variant -%}
+              </div>
+              {%- if block.settings.show_tax_note and cart.taxes_included -%}
+                <p class="cp__tax">Tax included.</p>
+              {%- endif -%}
+            </div>
+
+          {%- when 'variant_picker' -%}
+            {%- unless product.has_only_default_variant -%}
+              <div class="cp__picker" {{ block.shopify_attributes }}>
+                {%- render 'custom-variant-picker',
+                  product: product,
+                  current_variant: current_variant,
+                  block: block,
+                  section_id: section.id
+                -%}
+              </div>
+            {%- endunless -%}
+
+          {%- when 'inventory' -%}
+            <p class="cp__meta" {{ block.shopify_attributes }}>
+              {%- if block.settings.show_sku -%}
+                <span data-sku {% if current_variant.sku == blank %}hidden{% endif %}>SKU: <span data-sku-value>{{ current_variant.sku }}</span></span>
+              {%- endif -%}
+              <span class="cp__stock" data-stock></span>
+            </p>
+
+          {%- when 'buy_buttons' -%}
+            <div class="cp__buy-block" {{ block.shopify_attributes }}>
+              <div class="cp__buy">
+                {%- if block.settings.show_quantity -%}
+                  <div class="cp__qty">
+                    <label class="visually-hidden" for="Quantity-{{ section.id }}">{{ 'products.product.quantity.label' | t }}</label>
+                    <quantity-stepper class="qty">
+                      <button type="button" class="qty__btn" data-step="-1" aria-label="{{ 'products.product.quantity.decrease' | t: product: product.title | escape }}">
+                        <span class="svg-wrapper">{{ 'icon-minus.svg' | inline_asset_content }}</span>
+                      </button>
+                      <input
+                        id="Quantity-{{ section.id }}"
+                        class="qty__input"
+                        type="number"
+                        name="quantity"
+                        value="1"
+                        min="1"
+                        inputmode="numeric"
+                        form="{{ form_id }}"
+                        data-quantity-input
+                      >
+                      <button type="button" class="qty__btn" data-step="1" aria-label="{{ 'products.product.quantity.increase' | t: product: product.title | escape }}">
+                        <span class="svg-wrapper">{{ 'icon-plus.svg' | inline_asset_content }}</span>
+                      </button>
+                    </quantity-stepper>
+                  </div>
+                {%- endif -%}
+
+                <button
+                  type="submit"
+                  name="add"
+                  form="{{ form_id }}"
+                  class="cp__atc button button--primary"
+                  data-add-button
+                  {% unless current_variant.available %}disabled{% endunless %}
+                >
+                  <span data-add-label>
+                    {%- if current_variant.available -%}
+                      {{ 'products.product.add_to_cart' | t }}
+                    {%- else -%}
+                      {{ 'products.product.sold_out' | t }}
+                    {%- endif -%}
+                  </span>
+                  <span class="cp__spinner" aria-hidden="true"></span>
+                </button>
+              </div>
+              <p class="cp__form-error" role="alert" data-form-error hidden></p>
+            </div>
+
+          {%- when 'pincode' -%}
+            <div {{ block.shopify_attributes }}>
+              {%- render 'custom-pincode-checker', block: block, section_id: section.id -%}
+            </div>
+
+          {%- when 'description' -%}
+            {%- if product.description != blank -%}
+              <details class="cp__details" {% if block.settings.open %}open{% endif %} {{ block.shopify_attributes }}>
+                <summary>{{ block.settings.heading | escape }}</summary>
+                <div class="rte">{{ product.description }}</div>
+              </details>
+            {%- endif -%}
+
           {%- when 'text' -%}
             <div class="cp__text rte" {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
         {%- endcase -%}
       {%- endfor -%}
-
-      {%- if product.description != blank -%}
-        <details class="cp__details" open>
-          <summary>{{ section.settings.description_heading | escape }}</summary>
-          <div class="rte">{{ product.description }}</div>
-        </details>
-      {%- endif -%}
     </div>
   </div>
 
@@ -235,14 +270,70 @@
 {% schema %}
 {
   "name": "Custom product",
-  "presets": [{ "name": "Custom product" }],
   "tag": "section",
   "class": "section",
   "blocks": [
     { "type": "@app" },
+    { "type": "vendor", "name": "Vendor", "limit": 1, "settings": [] },
+    { "type": "title", "name": "Title", "limit": 1, "settings": [] },
     {
-      "type": "text",
-      "name": "Text",
+      "type": "price", "name": "Price", "limit": 1,
+      "settings": [
+        { "type": "checkbox", "id": "show_tax_note", "label": "Show \"Tax included\" when prices include tax", "default": true }
+      ]
+    },
+    {
+      "type": "variant_picker", "name": "Variant picker", "limit": 1,
+      "settings": [
+        {
+          "type": "textarea", "id": "swatch_colors", "label": "Colour swatches",
+          "default": "Silver: #c4c7cc\nBlack: #1f1f1f\nWhite: #f7f7f5",
+          "info": "One per line as Name: #hex. Option values not listed fall back to Shopify swatches, then to the colour name."
+        },
+        { "type": "text", "id": "color_option_names", "label": "Colour option names", "default": "Color, Colour" }
+      ]
+    },
+    {
+      "type": "inventory", "name": "SKU and stock", "limit": 1,
+      "settings": [
+        { "type": "checkbox", "id": "show_sku", "label": "Show SKU", "default": true },
+        {
+          "type": "range", "id": "low_stock_threshold", "label": "Low stock message below",
+          "min": 0, "max": 20, "step": 1, "default": 5,
+          "info": "Shown only for tracked variants that cannot oversell. 0 hides it."
+        }
+      ]
+    },
+    {
+      "type": "buy_buttons", "name": "Quantity and add to cart", "limit": 1,
+      "settings": [
+        { "type": "checkbox", "id": "show_quantity", "label": "Show quantity selector", "default": true }
+      ]
+    },
+    {
+      "type": "pincode", "name": "Delivery checker", "limit": 1,
+      "settings": [
+        {
+          "type": "text", "id": "availability_api", "label": "Availability API URL",
+          "info": "Optional. When set, pincodes are checked live against warehouse stock (e.g. an app proxy path like /apps/fulfilment/express-availability). When blank, the zones below are used."
+        },
+        {
+          "type": "textarea", "id": "delivery_zones", "label": "Delivery zones",
+          "default": "11-19 | Delhi | 2\n20-28 | Delhi | 3\n30-34 | Delhi | 3\n36-44 | Mumbai | 2\n45-49 | Mumbai | 3\n50-53 | Bengaluru | 3\n56-59 | Bengaluru | 2\n60-69 | Bengaluru | 3\n70-74 | Delhi | 5\n75-79 | Delhi | 6\n80-85 | Delhi | 4",
+          "info": "One per line: pincode prefix range (first 2 digits) | dispatch warehouse | delivery days. Pincodes outside every range are not serviceable."
+        },
+        { "type": "range", "id": "cutoff_hour", "label": "Same-day dispatch cutoff (hour, IST)", "min": 10, "max": 20, "step": 1, "default": 14 }
+      ]
+    },
+    {
+      "type": "description", "name": "Description", "limit": 1,
+      "settings": [
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Specifications" },
+        { "type": "checkbox", "id": "open", "label": "Open by default", "default": true }
+      ]
+    },
+    {
+      "type": "text", "name": "Text",
       "settings": [{ "type": "richtext", "id": "text", "label": "Text" }]
     }
   ],
@@ -251,35 +342,24 @@
       "type": "product", "id": "product", "label": "Product",
       "info": "Used outside product pages (e.g. on the homepage). On a product page, that product is shown."
     },
-    { "type": "header", "content": "Product info" },
-    { "type": "checkbox", "id": "show_sku", "label": "Show SKU", "default": true },
-    {
-      "type": "range", "id": "low_stock_threshold", "label": "Low stock message below",
-      "min": 0, "max": 20, "step": 1, "default": 5,
-      "info": "Shown only for tracked variants that cannot oversell. 0 hides it."
-    },
-    { "type": "text", "id": "description_heading", "label": "Description heading", "default": "Specifications" },
-    {
-      "type": "textarea", "id": "swatch_colors", "label": "Colour swatches",
-      "default": "Silver: #c4c7cc\nBlack: #1f1f1f\nWhite: #f7f7f5",
-      "info": "One per line as Name: #hex. Option values not listed fall back to Shopify swatches, then to the colour name."
-    },
-    { "type": "text", "id": "color_option_names", "label": "Colour option names", "default": "Color, Colour" },
-    { "type": "header", "content": "Delivery checker" },
-    { "type": "checkbox", "id": "enable_pincode", "label": "Show pincode checker", "default": true },
-    {
-      "type": "text", "id": "availability_api", "label": "Availability API URL",
-      "info": "Optional. When set, pincodes are checked live against warehouse stock (e.g. an app proxy path like /apps/fulfilment/express-availability). When blank, the zones below are used."
-    },
-    {
-      "type": "textarea", "id": "delivery_zones", "label": "Delivery zones",
-      "default": "11-19 | Delhi | 2\n20-28 | Delhi | 3\n30-34 | Delhi | 3\n36-44 | Mumbai | 2\n45-49 | Mumbai | 3\n50-53 | Bengaluru | 3\n56-59 | Bengaluru | 2\n60-69 | Bengaluru | 3\n70-74 | Delhi | 5\n75-79 | Delhi | 6\n80-85 | Delhi | 4",
-      "info": "One per line: pincode prefix range (first 2 digits) | dispatch warehouse | delivery days. Pincodes outside every range are not serviceable."
-    },
-    { "type": "range", "id": "cutoff_hour", "label": "Same-day dispatch cutoff (hour, IST)", "min": 10, "max": 20, "step": 1, "default": 14 },
     { "type": "header", "content": "Section padding" },
     { "type": "range", "id": "padding_top", "min": 0, "max": 100, "step": 4, "unit": "px", "label": "Top padding", "default": 36 },
     { "type": "range", "id": "padding_bottom", "min": 0, "max": 100, "step": 4, "unit": "px", "label": "Bottom padding", "default": 36 }
+  ],
+  "presets": [
+    {
+      "name": "Custom product",
+      "blocks": [
+        { "type": "vendor" },
+        { "type": "title" },
+        { "type": "price" },
+        { "type": "variant_picker" },
+        { "type": "inventory" },
+        { "type": "buy_buttons" },
+        { "type": "pincode" },
+        { "type": "description" }
+      ]
+    }
   ]
 }
 {% endschema %}

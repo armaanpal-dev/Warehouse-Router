@@ -1,22 +1,22 @@
 {%- comment -%}
-  Pincode delivery checker. Two modes, picked by section settings:
+  Pincode delivery checker. Two modes, picked by the pincode block's settings:
   - availability_api set: POSTs { variant_id, quantity, pincode } to the warehouse API (Task 2).
   - otherwise: resolves the pincode against the delivery_zones table below, client-side.
-  Accepts: section, product, current_variant
+  Accepts: block (the pincode block), section_id
 {%- endcomment -%}
 <pincode-checker
   class="pc"
-  data-api="{{ section.settings.availability_api | escape }}"
-  data-cutoff="{{ section.settings.cutoff_hour }}"
+  data-api="{{ block.settings.availability_api | escape }}"
+  data-cutoff="{{ block.settings.cutoff_hour }}"
 >
   <form class="pc__form" novalidate data-pincode-form>
-    <label class="pc__label" for="Pincode-{{ section.id }}">
+    <label class="pc__label" for="Pincode-{{ section_id }}">
       <span class="svg-wrapper" aria-hidden="true">{{ 'icon-truck.svg' | inline_asset_content }}</span>
       Check delivery availability
     </label>
     <div class="pc__row">
       <input
-        id="Pincode-{{ section.id }}"
+        id="Pincode-{{ section_id }}"
         class="pc__input field__input"
         type="text"
         inputmode="numeric"
@@ -24,16 +24,16 @@
         maxlength="6"
         pattern="[1-9][0-9]{5}"
         placeholder="Enter 6-digit pincode"
-        aria-describedby="PincodeResult-{{ section.id }}"
+        aria-describedby="PincodeResult-{{ section_id }}"
         data-pincode-input
       >
       <button type="submit" class="pc__btn button button--secondary" data-pincode-submit>Check</button>
     </div>
   </form>
-  <div id="PincodeResult-{{ section.id }}" class="pc__result" role="status" aria-live="polite" data-pincode-result></div>
+  <div id="PincodeResult-{{ section_id }}" class="pc__result" role="status" aria-live="polite" data-pincode-result></div>
   <script type="application/json" data-zones>
     [
-      {%- assign lines = section.settings.delivery_zones | newline_to_br | split: '<br />' -%}
+      {%- assign lines = block.settings.delivery_zones | newline_to_br | split: '<br />' -%}
       {%- assign first = true -%}
       {%- for line in lines -%}
         {%- assign parts = line | strip | split: '|' -%}
