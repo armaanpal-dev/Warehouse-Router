@@ -1,0 +1,5 @@
+{
+  shop { name currencyCode plan { displayName } }
+  themes(first: 30) { nodes { id name role } }
+  products(first: 5, query: "title:*milk*") { nodes { id title handle } }
+}

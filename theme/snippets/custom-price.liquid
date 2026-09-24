@@ -1,0 +1,18 @@
+{%- comment -%}
+  Renders a variant price with compare-at and a sale badge.
+  JS mirrors this markup in custom-product.js (renderPrice) — keep the two in step.
+  Accepts: variant
+{%- endcomment -%}
+{%- liquid
+  assign on_sale = false
+  if variant.compare_at_price > variant.price
+    assign on_sale = true
+  endif
+-%}
+<span class="cp-price__current{% if on_sale %} is-sale{% endif %}">{{ variant.price | money }}</span>
+{%- if on_sale -%}
+  <s class="cp-price__compare"><span class="visually-hidden">{{ 'products.product.price.regular_price' | t }}</span>{{ variant.compare_at_price | money }}</s>
+  <span class="cp-price__badge">
+    {{- variant.compare_at_price | minus: variant.price | times: 100 | divided_by: variant.compare_at_price | append: '% off' -}}
+  </span>
+{%- endif -%}

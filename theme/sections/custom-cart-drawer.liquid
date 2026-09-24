@@ -1,0 +1,138 @@
+{%- comment -%}
+  AJAX cart drawer. Rendered once from layout/theme.liquid via {% section 'custom-cart-drawer' %}, and
+  re-rendered after every cart write through the Section Rendering API (sections=custom-cart-drawer), so
+  this file is the single source of truth for cart markup: JS never builds line-item HTML.
+  Only the [data-cart-render] region is swapped; the dialog shell and its listeners stay put.
+{%- endcomment -%}
+{{ 'custom-cart-drawer.css' | asset_url | stylesheet_tag }}
+
+<cart-drawer-custom class="cd" id="CustomCartDrawer" inert>
+  <span class="cd__overlay" data-cart-close aria-hidden="true"></span>
+  <div class="cd__panel color-{{ settings.cart_color_scheme | default: 'scheme-1' }}" role="dialog" aria-modal="true" aria-labelledby="CustomCartTitle" tabindex="-1">
+    <div class="cd__render" data-cart-render>
+      <div class="cd__header">
+        <h2 id="CustomCartTitle" class="cd__title">
+          Your cart
+          {%- if cart.item_count > 0 %} <span class="cd__count">({{ cart.item_count }})</span>{% endif -%}
+        </h2>
+        <button type="button" class="cd__close" data-cart-close data-focus-key="close" aria-label="{{ 'accessibility.close' | t }}">
+          <span class="svg-wrapper">{{ 'icon-close.svg' | inline_asset_content }}</span>
+        </button>
+      </div>
+
+      {%- if cart == empty -%}
+        <div class="cd__empty">
+          <p>Your cart is empty.</p>
+          <a href="{{ routes.all_products_collection_url }}" class="button" data-focus-key="continue">{{ 'general.continue_shopping' | t }}</a>
+        </div>
+      {%- else -%}
+        <ul class="cd__items" role="list">
+          {%- for item in cart.items -%}
+            {%- liquid
+              assign max_qty = ''
+              if item.variant.inventory_management == 'shopify' and item.variant.inventory_policy == 'deny'
+                assign max_qty = item.variant.inventory_quantity | at_least: item.quantity
+              endif
+            -%}
+            <li class="cd__item" data-line-key="{{ item.key }}">
+              <a href="{{ item.url }}" class="cd__image" tabindex="-1" aria-hidden="true">
+                {%- if item.image -%}
+                  {{ item.image | image_url: width: 180 | image_tag: loading: 'lazy', alt: '' }}
+                {%- endif -%}
+              </a>
+              <div class="cd__details">
+                <a href="{{ item.url }}" class="cd__name">{{ item.product.title | escape }}</a>
+                {%- unless item.product.has_only_default_variant -%}
+                  <p class="cd__variant">{{ item.variant.title | escape }}</p>
+                {%- endunless -%}
+                {%- for p in item.properties -%}
+                  {%- assign first_char = p.first | slice: 0 -%}
+                  {%- if p.last != blank and first_char != '_' -%}
+                    <p class="cd__variant">{{ p.first | escape }}: {{ p.last | escape }}</p>
+                  {%- endif -%}
+                {%- endfor -%}
+                <p class="cd__unit">
+                  {%- if item.original_price > item.final_price -%}
+                    <s>{{ item.original_price | money }}</s>
+                  {%- endif -%}
+                  {{ item.final_price | money }}
+                </p>
+                {%- for d in item.line_level_discount_allocations -%}
+                  <p class="cd__discount">{{ d.discount_application.title | escape }} (−{{ d.amount | money }})</p>
+                {%- endfor -%}
+
+                <div class="cd__controls">
+                  <div class="qty qty--small">
+                    <button type="button" class="qty__btn" data-qty-step="-1" data-focus-key="minus:{{ item.key }}" aria-label="Decrease quantity of {{ item.product.title | escape }}">
+                      <span class="svg-wrapper">{{ 'icon-minus.svg' | inline_asset_content }}</span>
+                    </button>
+                    <input
+                      class="qty__input"
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      {% if max_qty != '' %}max="{{ max_qty }}"{% endif %}
+                      value="{{ item.quantity }}"
+                      aria-label="Quantity of {{ item.product.title | escape }}"
+                      data-qty-input
+                      data-focus-key="qty:{{ item.key }}"
+                    >
+                    <button
+                      type="button"
+                      class="qty__btn"
+                      data-qty-step="1"
+                      data-focus-key="plus:{{ item.key }}"
+                      aria-label="Increase quantity of {{ item.product.title | escape }}"
+                      {% if max_qty != '' and item.quantity >= max_qty %}disabled{% endif %}
+                    >
+                      <span class="svg-wrapper">{{ 'icon-plus.svg' | inline_asset_content }}</span>
+                    </button>
+                  </div>
+                  <button type="button" class="cd__remove link" data-remove data-focus-key="remove:{{ item.key }}">
+                    Remove<span class="visually-hidden"> {{ item.product.title | escape }}</span>
+                  </button>
+                </div>
+                <p class="cd__line-error" role="alert" data-line-error hidden></p>
+              </div>
+              <div class="cd__line-price">
+                {%- if item.original_line_price > item.final_line_price -%}
+                  <s>{{ item.original_line_price | money }}</s>
+                {%- endif -%}
+                <span>{{ item.final_line_price | money }}</span>
+              </div>
+            </li>
+          {%- endfor -%}
+        </ul>
+
+        <div class="cd__footer">
+          {%- for d in cart.cart_level_discount_applications -%}
+            <p class="cd__row cd__row--discount">
+              <span>{{ d.title | escape }}</span><span>−{{ d.total_allocated_amount | money }}</span>
+            </p>
+          {%- endfor -%}
+          <p class="cd__row cd__row--total">
+            <span>Subtotal</span><span data-cart-total>{{ cart.total_price | money_with_currency }}</span>
+          </p>
+          <p class="cd__note">
+            {%- if cart.taxes_included -%}Taxes included.{%- else -%}Taxes calculated at checkout.{%- endif %}
+            Shipping calculated at checkout.
+          </p>
+          <form action="{{ routes.cart_url }}" method="post" class="cd__checkout-form">
+            <button type="submit" name="checkout" class="button button--primary cd__checkout" data-focus-key="checkout">
+              {{ 'sections.cart.checkout' | t }}
+            </button>
+          </form>
+          <a href="{{ routes.cart_url }}" class="cd__view link">View cart</a>
+        </div>
+      {%- endif -%}
+    </div>
+    <p class="visually-hidden" role="status" aria-live="polite" data-cart-status></p>
+  </div>
+</cart-drawer-custom>
+
+{% schema %}
+{
+  "name": "Cart drawer (custom)",
+  "settings": []
+}
+{% endschema %}

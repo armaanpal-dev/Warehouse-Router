@@ -1,0 +1,285 @@
+{%- comment -%}
+  Custom product section: gallery, variant picker, quantity, AJAX add-to-cart, pincode checker.
+  Works for any product: on a product template it uses that product; anywhere else (e.g. the homepage)
+  it uses the "Product" setting. Behaviour lives in assets/custom-product.js; the cart drawer is
+  sections/custom-cart-drawer.liquid + assets/custom-cart.js.
+{%- endcomment -%}
+{%- liquid
+  assign is_product_page = false
+  if template.name == 'product'
+    assign is_product_page = true
+  endif
+  if is_product_page == false and section.settings.product != blank
+    assign product = section.settings.product
+  endif
+-%}
+{%- if product == blank -%}{%- if request.design_mode -%}<p class="page-width">Choose a product in the section settings.</p>{%- endif -%}{%- else -%}
+{{ 'custom-product.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'custom-product.js' | asset_url }}" defer="defer"></script>
+
+{%- liquid
+  assign current_variant = product.selected_or_first_available_variant
+  assign form_id = 'product-form-' | append: section.id
+  assign low_stock = section.settings.low_stock_threshold
+-%}
+
+<product-page
+  class="cp page-width section-{{ section.id }}-padding"
+  data-section="{{ section.id }}"
+  data-url="{{ product.url }}"
+  data-low-stock="{{ low_stock }}"
+  data-update-url="{{ is_product_page }}"
+>
+  <div class="cp__grid">
+    {%- comment -%} ---------- Gallery ---------- {%- endcomment -%}
+    <div class="cp__gallery" aria-label="{{ 'products.product.media.gallery_viewer' | t }}">
+      <ul class="cp__media-list" role="list" data-media-list>
+        {%- for media in product.media -%}
+          <li
+            class="cp__media{% if media.id == current_variant.featured_media.id or current_variant.featured_media == blank and forloop.first %} is-active{% endif %}"
+            data-media-id="{{ media.id }}"
+          >
+            {%- if media.media_type == 'image' -%}
+              {%- liquid
+                assign loading = 'lazy'
+                assign priority = 'auto'
+                if forloop.first
+                  assign loading = 'eager'
+                  assign priority = 'high'
+                endif
+                assign alt = media.alt | default: product.title
+              -%}
+              {{
+                media.preview_image
+                | image_url: width: 1200
+                | image_tag:
+                  widths: '360, 540, 720, 900, 1200',
+                  sizes: '(min-width: 990px) 50vw, 100vw',
+                  loading: loading,
+                  fetchpriority: priority,
+                  alt: alt
+              }}
+            {%- else -%}
+              {{ media | media_tag: image_size: '1200x' }}
+            {%- endif -%}
+          </li>
+        {%- else -%}
+          <li class="cp__media is-active">{{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}</li>
+        {%- endfor -%}
+      </ul>
+      {%- if product.media.size > 1 -%}
+        <ul class="cp__thumbs" role="list">
+          {%- for media in product.media -%}
+            <li>
+              <button
+                type="button"
+                class="cp__thumb{% if media.id == current_variant.featured_media.id %} is-active{% endif %}"
+                data-thumb="{{ media.id }}"
+                aria-label="{{ 'products.product.media.load_image' | t: index: forloop.index }}"
+              >
+                {{ media.preview_image | image_url: width: 160 | image_tag: loading: 'lazy', alt: '' }}
+              </button>
+            </li>
+          {%- endfor -%}
+        </ul>
+      {%- endif -%}
+    </div>
+
+    {%- comment -%} ---------- Info ---------- {%- endcomment -%}
+    <div class="cp__info">
+      {%- if product.vendor != blank -%}
+        <p class="cp__vendor">{{ product.vendor | escape }}</p>
+      {%- endif -%}
+      {%- if is_product_page -%}
+        <h1 class="cp__title">{{ product.title | escape }}</h1>
+      {%- else -%}
+        <h2 class="cp__title"><a href="{{ product.url }}">{{ product.title | escape }}</a></h2>
+      {%- endif -%}
+
+      <div class="cp__price" data-price aria-live="polite">
+        {%- render 'custom-price', variant: current_variant -%}
+      </div>
+      {%- if cart.taxes_included -%}
+        <p class="cp__tax">Tax included.</p>
+      {%- endif -%}
+
+      <form
+        id="{{ form_id }}"
+        class="cp__form"
+        action="{{ routes.cart_add_url }}"
+        method="post"
+        enctype="multipart/form-data"
+        novalidate
+        data-product-form
+      >
+        <input type="hidden" name="id" value="{{ current_variant.id }}" data-variant-input>
+
+        {%- unless product.has_only_default_variant -%}
+          {%- render 'custom-variant-picker', product: product, current_variant: current_variant, section: section -%}
+        {%- endunless -%}
+
+        <p class="cp__meta">
+          {%- if section.settings.show_sku -%}
+            <span data-sku {% if current_variant.sku == blank %}hidden{% endif %}>SKU: <span data-sku-value>{{ current_variant.sku }}</span></span>
+          {%- endif -%}
+          <span class="cp__stock" data-stock></span>
+        </p>
+
+        <div class="cp__buy">
+          <div class="cp__qty">
+            <label class="visually-hidden" for="Quantity-{{ section.id }}">{{ 'products.product.quantity.label' | t }}</label>
+            <quantity-stepper class="qty">
+              <button type="button" class="qty__btn" data-step="-1" aria-label="{{ 'products.product.quantity.decrease' | t: product: product.title | escape }}">
+                <span class="svg-wrapper">{{ 'icon-minus.svg' | inline_asset_content }}</span>
+              </button>
+              <input
+                id="Quantity-{{ section.id }}"
+                class="qty__input"
+                type="number"
+                name="quantity"
+                value="1"
+                min="1"
+                inputmode="numeric"
+                data-quantity-input
+              >
+              <button type="button" class="qty__btn" data-step="1" aria-label="{{ 'products.product.quantity.increase' | t: product: product.title | escape }}">
+                <span class="svg-wrapper">{{ 'icon-plus.svg' | inline_asset_content }}</span>
+              </button>
+            </quantity-stepper>
+          </div>
+
+          <button
+            type="submit"
+            name="add"
+            class="cp__atc button button--primary"
+            data-add-button
+            {% unless current_variant.available %}disabled{% endunless %}
+          >
+            <span data-add-label>
+              {%- if current_variant.available -%}
+                {{ 'products.product.add_to_cart' | t }}
+              {%- else -%}
+                {{ 'products.product.sold_out' | t }}
+              {%- endif -%}
+            </span>
+            <span class="cp__spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="cp__form-error" role="alert" data-form-error hidden></p>
+      </form>
+
+      {%- if section.settings.enable_pincode -%}
+        {%- render 'custom-pincode-checker', section: section, product: product, current_variant: current_variant -%}
+      {%- endif -%}
+
+      {%- for block in section.blocks -%}
+        {%- case block.type -%}
+          {%- when '@app' -%}
+            {% render block %}
+          {%- when 'text' -%}
+            <div class="cp__text rte" {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
+        {%- endcase -%}
+      {%- endfor -%}
+
+      {%- if product.description != blank -%}
+        <details class="cp__details" open>
+          <summary>{{ section.settings.description_heading | escape }}</summary>
+          <div class="rte">{{ product.description }}</div>
+        </details>
+      {%- endif -%}
+    </div>
+  </div>
+
+  {%- comment -%}
+    Variant data for JS. Built by hand rather than `product | json` so we can include
+    stock only where it is meaningful (tracked + deny) and keep the payload small.
+  {%- endcomment -%}
+  <script type="application/json" data-product-json>
+    {
+      "moneyFormat": {{ shop.money_format | json }},
+      "options": {{ product.options | json }},
+      "variants": [
+        {%- for v in product.variants -%}
+          {
+            "id": {{ v.id }},
+            "title": {{ v.title | json }},
+            "options": {{ v.options | json }},
+            "available": {{ v.available | json }},
+            "price": {{ v.price }},
+            "compareAtPrice": {{ v.compare_at_price | default: 0 }},
+            "sku": {{ v.sku | json }},
+            "mediaId": {{ v.featured_media.id | default: 'null' }},
+            "maxQty": {% if v.inventory_management == 'shopify' and v.inventory_policy == 'deny' %}{{ v.inventory_quantity | at_least: 0 }}{% else %}null{% endif %}
+          }{% unless forloop.last %},{% endunless %}
+        {%- endfor -%}
+      ]
+    }
+  </script>
+</product-page>
+
+{%- style -%}
+  .section-{{ section.id }}-padding {
+    padding-top: {{ section.settings.padding_top | times: 0.75 | round: 0 }}px;
+    padding-bottom: {{ section.settings.padding_bottom | times: 0.75 | round: 0 }}px;
+  }
+  @media screen and (min-width: 750px) {
+    .section-{{ section.id }}-padding {
+      padding-top: {{ section.settings.padding_top }}px;
+      padding-bottom: {{ section.settings.padding_bottom }}px;
+    }
+  }
+{%- endstyle -%}
+
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Custom product",
+  "presets": [{ "name": "Custom product" }],
+  "tag": "section",
+  "class": "section",
+  "blocks": [
+    { "type": "@app" },
+    {
+      "type": "text",
+      "name": "Text",
+      "settings": [{ "type": "richtext", "id": "text", "label": "Text" }]
+    }
+  ],
+  "settings": [
+    {
+      "type": "product", "id": "product", "label": "Product",
+      "info": "Used outside product pages (e.g. on the homepage). On a product page, that product is shown."
+    },
+    { "type": "header", "content": "Product info" },
+    { "type": "checkbox", "id": "show_sku", "label": "Show SKU", "default": true },
+    {
+      "type": "range", "id": "low_stock_threshold", "label": "Low stock message below",
+      "min": 0, "max": 20, "step": 1, "default": 5,
+      "info": "Shown only for tracked variants that cannot oversell. 0 hides it."
+    },
+    { "type": "text", "id": "description_heading", "label": "Description heading", "default": "Specifications" },
+    {
+      "type": "textarea", "id": "swatch_colors", "label": "Colour swatches",
+      "default": "Silver: #c4c7cc\nBlack: #1f1f1f\nWhite: #f7f7f5",
+      "info": "One per line as Name: #hex. Option values not listed fall back to Shopify swatches, then to the colour name."
+    },
+    { "type": "text", "id": "color_option_names", "label": "Colour option names", "default": "Color, Colour" },
+    { "type": "header", "content": "Delivery checker" },
+    { "type": "checkbox", "id": "enable_pincode", "label": "Show pincode checker", "default": true },
+    {
+      "type": "text", "id": "availability_api", "label": "Availability API URL",
+      "info": "Optional. When set, pincodes are checked live against warehouse stock (e.g. an app proxy path like /apps/fulfilment/express-availability). When blank, the zones below are used."
+    },
+    {
+      "type": "textarea", "id": "delivery_zones", "label": "Delivery zones",
+      "default": "11-19 | Delhi | 2\n20-28 | Delhi | 3\n30-34 | Delhi | 3\n36-44 | Mumbai | 2\n45-49 | Mumbai | 3\n50-53 | Bengaluru | 3\n56-59 | Bengaluru | 2\n60-69 | Bengaluru | 3\n70-74 | Delhi | 5\n75-79 | Delhi | 6\n80-85 | Delhi | 4",
+      "info": "One per line: pincode prefix range (first 2 digits) | dispatch warehouse | delivery days. Pincodes outside every range are not serviceable."
+    },
+    { "type": "range", "id": "cutoff_hour", "label": "Same-day dispatch cutoff (hour, IST)", "min": 10, "max": 20, "step": 1, "default": 14 },
+    { "type": "header", "content": "Section padding" },
+    { "type": "range", "id": "padding_top", "min": 0, "max": 100, "step": 4, "unit": "px", "label": "Top padding", "default": 36 },
+    { "type": "range", "id": "padding_bottom", "min": 0, "max": 100, "step": 4, "unit": "px", "label": "Bottom padding", "default": 36 }
+  ]
+}
+{% endschema %}

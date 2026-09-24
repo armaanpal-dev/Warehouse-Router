@@ -1,0 +1,8 @@
+{
+  productVariant(id: "gid://shopify/ProductVariant/42753591476306") {
+    title availableForSale inventoryPolicy
+    inventoryItem { tracked requiresShipping
+      inventoryLevels(first: 10) { nodes { location { name } quantities(names: ["available", "committed", "on_hand", "reserved"]) { name quantity } } } }
+  }
+  locations(first: 10) { nodes { name isActive fulfillsOnlineOrders shipsInventory hasActiveInventory address { city zip countryCode } } }
+}

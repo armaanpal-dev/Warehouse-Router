@@ -1,0 +1,16 @@
+{
+  deliveryProfiles(first: 10) {
+    nodes {
+      id name default
+      profileLocationGroups {
+        locationGroup { id locations(first: 20) { nodes { id name } } }
+        locationGroupZones(first: 20) {
+          nodes {
+            zone { id name countries { code { countryCode } } }
+            methodDefinitions(first: 10) { nodes { id name active rateProvider { ... on DeliveryRateDefinition { price { amount currencyCode } } } } }
+          }
+        }
+      }
+    }
+  }
+}

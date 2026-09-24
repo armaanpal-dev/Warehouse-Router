@@ -1,0 +1,44 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": {
+    "main": {
+      "type": "main-page",
+      "settings": {
+        "padding_top": 28,
+        "padding_bottom": 28
+      }
+    },
+    "1785470778a2f04328": {
+      "type": "apps",
+      "blocks": {
+        "another_shoppable_video_app_another_shoppable_video_app_YBPFea": {
+          "type": "shopify://apps/another-shoppable-video-app/blocks/another_shoppable_video_app/019ec601-320f-7fa5-b572-c3573c299eae",
+          "settings": {}
+        },
+        "another_shoppable_video_app_common_gallery_nyTp8k": {
+          "type": "shopify://apps/another-shoppable-video-app/blocks/common-gallery/019ec601-320f-7fa5-b572-c3573c299eae",
+          "settings": {}
+        }
+      },
+      "block_order": [
+        "another_shoppable_video_app_another_shoppable_video_app_YBPFea",
+        "another_shoppable_video_app_common_gallery_nyTp8k"
+      ],
+      "settings": {
+        "include_margins": true
+      }
+    }
+  },
+  "order": [
+    "main",
+    "1785470778a2f04328"
+  ]
+}

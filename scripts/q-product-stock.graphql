@@ -1,0 +1,7 @@
+{
+  productByIdentifier(identifier: { handle: "precise-milk-cooler" }) {
+    id templateSuffix status onlineStoreUrl
+    variants(first: 20) { nodes { title availableForSale inventoryQuantity
+      inventoryItem { tracked inventoryLevels(first: 10) { nodes { location { name } quantities(names: ["available"]) { quantity } } } } } }
+  }
+}

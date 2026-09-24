@@ -1,0 +1,1 @@
+mutation { themeDelete(id: "gid://shopify/OnlineStoreTheme/131347677266") { deletedThemeId userErrors { field message } } }

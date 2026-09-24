@@ -1,0 +1,20 @@
+{
+  "name": "warehouse-availability-api",
+  "version": "1.0.0",
+  "description": "Pincode-based multi-warehouse availability, allocation and order routing for Shopify",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
+    "webhook": "node scripts/send-webhook.js",
+    "sync-locations": "node scripts/sync-locations.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

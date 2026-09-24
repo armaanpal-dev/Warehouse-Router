@@ -1,0 +1,69 @@
+/* Custom cart drawer + the shared quantity stepper (.qty), loaded site-wide from the layout. */
+
+/* ---------- Quantity stepper ---------- */
+.qty { display: inline-flex; align-items: center; border: 1px solid rgba(var(--color-foreground), 0.2); border-radius: var(--inputs-radius, 0.4rem); min-height: 4.8rem; }
+.qty__btn { display: inline-flex; align-items: center; justify-content: center; width: 4.4rem; align-self: stretch; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+.qty__btn .svg-wrapper { width: 1.2rem; height: 1.2rem; }
+.qty__btn[disabled] { opacity: 0.3; cursor: not-allowed; }
+.qty__input { width: 4.4rem; border: 0; background: transparent; color: inherit; text-align: center; font-size: 1.5rem; -moz-appearance: textfield; appearance: textfield; }
+.qty__input::-webkit-outer-spin-button, .qty__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty__input:focus-visible, .qty__btn:focus-visible { outline: 2px solid rgb(var(--color-foreground)); outline-offset: -2px; }
+.qty--small { min-height: 3.6rem; }
+.qty--small .qty__btn { width: 3.4rem; }
+.qty--small .qty__input { width: 3.4rem; font-size: 1.4rem; }
+
+/* ---------- Drawer shell ---------- */
+html.cd-lock { overflow: hidden; }
+/* Top of the stack (max z-index): app embeds such as floating video reels (2147483000) or chat bubbles
+   must not cover the checkout button while the modal drawer is open. */
+.cd { position: fixed; inset: 0; z-index: 2147483647; visibility: hidden; pointer-events: none; }
+.cd.is-open { visibility: visible; pointer-events: auto; }
+.cd__overlay { position: absolute; inset: 0; display: block; background: rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.25s ease; cursor: pointer; }
+.cd.is-open .cd__overlay { opacity: 1; }
+.cd__panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(42rem, 100vw);
+  display: flex; flex-direction: column; background: rgb(var(--color-background)); color: rgb(var(--color-foreground));
+  transform: translateX(100%); transition: transform 0.3s ease; box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12); outline: none;
+}
+.cd.is-open .cd__panel { transform: none; }
+@media (prefers-reduced-motion: reduce) { .cd__panel, .cd__overlay { transition: none; } }
+
+.cd__render { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cd__header { display: flex; align-items: center; justify-content: space-between; padding: 1.6rem 2rem; border-bottom: 1px solid rgba(var(--color-foreground), 0.1); }
+.cd__title { margin: 0; font-size: 1.8rem; }
+.cd__count { font-weight: 400; color: rgba(var(--color-foreground), 0.65); }
+.cd__close { display: inline-flex; align-items: center; justify-content: center; width: 4.4rem; height: 4.4rem; margin-right: -1rem; border: 0; background: none; color: inherit; cursor: pointer; }
+
+.cd__empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.6rem; padding: 2rem; text-align: center; }
+
+/* ---------- Items ---------- */
+.cd__items { flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0 2rem; list-style: none; }
+.cd__item { display: grid; grid-template-columns: 8rem minmax(0, 1fr) auto; gap: 1.4rem; padding: 1.8rem 0; border-bottom: 1px solid rgba(var(--color-foreground), 0.08); transition: opacity 0.2s; }
+.cd__item.is-updating { opacity: 0.5; pointer-events: none; }
+.cd__image { display: block; width: 8rem; aspect-ratio: 1; border-radius: 0.8rem; overflow: hidden; background: rgba(var(--color-foreground), 0.04); }
+.cd__image img { width: 100%; height: 100%; object-fit: contain; }
+.cd__name { font-size: 1.4rem; font-weight: 600; color: inherit; text-decoration: none; line-height: 1.35; }
+.cd__name:hover { text-decoration: underline; }
+.cd__variant, .cd__unit, .cd__discount { margin: 0.3rem 0 0; font-size: 1.3rem; color: rgba(var(--color-foreground), 0.7); }
+.cd__unit s, .cd__line-price s { margin-right: 0.4rem; opacity: 0.6; }
+.cd__discount { color: #0f7b3f; }
+.cd__controls { display: flex; align-items: center; gap: 1.2rem; margin-top: 1rem; }
+.cd__remove { padding: 0.8rem 0; border: 0; background: none; font-size: 1.3rem; color: inherit; text-decoration: underline; cursor: pointer; }
+.cd__line-error { margin: 0.8rem 0 0; font-size: 1.3rem; color: #b3261e; }
+.cd__line-price { font-size: 1.4rem; font-weight: 600; text-align: right; white-space: nowrap; }
+.cd__line-price s { display: block; font-weight: 400; }
+
+/* ---------- Footer ---------- */
+.cd__footer { padding: 1.6rem 2rem calc(1.6rem + env(safe-area-inset-bottom)); border-top: 1px solid rgba(var(--color-foreground), 0.1); }
+.cd__row { display: flex; justify-content: space-between; margin: 0 0 0.6rem; font-size: 1.4rem; }
+.cd__row--discount { color: #0f7b3f; }
+.cd__row--total { font-size: 1.7rem; font-weight: 600; }
+.cd__note { margin: 0 0 1.4rem; font-size: 1.2rem; color: rgba(var(--color-foreground), 0.65); }
+.cd__checkout { width: 100%; min-height: 5rem; }
+.cd__view { display: block; margin-top: 1.2rem; text-align: center; font-size: 1.3rem; }
+
+@media screen and (max-width: 480px) {
+  .cd__item { grid-template-columns: 6.4rem minmax(0, 1fr); }
+  .cd__image { width: 6.4rem; }
+  .cd__line-price { grid-column: 2; text-align: left; }
+}

@@ -1,0 +1,72 @@
+{%- comment -%}
+  Option pickers as radio groups (one fieldset per option). Colour options render as swatches,
+  everything else as pills. Server-side we only mark the current selection; which values are
+  disabled depends on the other selections, so custom-product.js computes and applies that on load
+  and on every change.
+  Accepts: product, current_variant, section
+{%- endcomment -%}
+{%- liquid
+  assign color_names = section.settings.color_option_names | downcase | split: ','
+  assign swatch_lines = section.settings.swatch_colors | newline_to_br | split: '<br />'
+-%}
+<div class="cp-variants" data-variant-picker>
+  {%- for option in product.options_with_values -%}
+    {%- liquid
+      assign is_color = false
+      for n in color_names
+        assign n_clean = n | strip
+        assign option_name = option.name | downcase
+        if option_name == n_clean
+          assign is_color = true
+        endif
+      endfor
+    -%}
+    <fieldset class="cp-variants__group{% if is_color %} is-color{% endif %}" data-option-index="{{ forloop.index0 }}">
+      <legend class="cp-variants__legend">
+        {{ option.name | escape }}:
+        <span class="cp-variants__selected" data-selected-label>{{ option.selected_value | escape }}</span>
+      </legend>
+      <div class="cp-variants__values">
+        {%- for value in option.values -%}
+          {%- liquid
+            assign input_id = section.id | append: '-' | append: option.position | append: '-' | append: forloop.index0
+            assign swatch = ''
+            if is_color
+              for line in swatch_lines
+                assign parts = line | strip | split: ':'
+                assign key = parts.first | strip | downcase
+                assign val_down = value | downcase
+                if key == val_down
+                  assign swatch = parts.last | strip
+                endif
+              endfor
+              if swatch == blank and value.swatch.color
+                assign swatch = value.swatch.color
+              endif
+              if swatch == blank
+                assign swatch = value | handleize
+              endif
+            endif
+          -%}
+          <input
+            type="radio"
+            class="cp-variants__input"
+            id="{{ input_id }}"
+            name="{{ section.id }}-option-{{ option.position }}"
+            value="{{ value | escape }}"
+            {% if option.selected_value == value %}checked{% endif %}
+          >
+          <label
+            for="{{ input_id }}"
+            class="cp-variants__value{% if is_color %} cp-variants__value--swatch{% endif %}"
+            {% if is_color %}style="--swatch: {{ swatch }}" title="{{ value | escape }}"{% endif %}
+          >
+            {%- if is_color -%}<span class="cp-variants__dot" aria-hidden="true"></span>{%- endif -%}
+            <span class="cp-variants__text">{{ value | escape }}</span>
+            <span class="visually-hidden" data-state-label></span>
+          </label>
+        {%- endfor -%}
+      </div>
+    </fieldset>
+  {%- endfor -%}
+</div>

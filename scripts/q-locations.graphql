@@ -1,0 +1,5 @@
+{
+  locations(first: 20, includeInactive: true) { nodes { id name isActive fulfillsOnlineOrders address { city zip countryCode } } }
+  publications(first: 10) { nodes { id name } }
+  currentAppInstallation { accessScopes { handle } }
+}

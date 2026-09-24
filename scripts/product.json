@@ -1,0 +1,45 @@
+{
+  "productId": "gid://shopify/Product/7663752806482",
+  "variants": [
+    {
+      "id": "gid://shopify/ProductVariant/42753591476306",
+      "title": "Silver / 8 Ltr",
+      "sku": "MC16-SLV-08"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591509074",
+      "title": "Silver / 12 Ltr",
+      "sku": "MC16-SLV-12"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591541842",
+      "title": "Silver / 18 Ltr",
+      "sku": "MC16-SLV-18"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591574610",
+      "title": "Black / 8 Ltr",
+      "sku": "MC16-BLK-08"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591607378",
+      "title": "Black / 12 Ltr",
+      "sku": "MC16-BLK-12"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591640146",
+      "title": "Black / 18 Ltr",
+      "sku": "MC16-BLK-18"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591672914",
+      "title": "White / 8 Ltr",
+      "sku": "MC16-WHT-08"
+    },
+    {
+      "id": "gid://shopify/ProductVariant/42753591705682",
+      "title": "White / 12 Ltr",
+      "sku": "MC16-WHT-12"
+    }
+  ]
+}

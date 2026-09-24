@@ -1,0 +1,18 @@
+mutation {
+  deliveryProfileUpdate(
+    id: "gid://shopify/DeliveryProfile/78555185234"
+    profile: {
+      locationGroupsToUpdate: [{
+        id: "gid://shopify/DeliveryLocationGroup/79234400338"
+        locationsToAdd: [
+          "gid://shopify/Location/68044324946",
+          "gid://shopify/Location/68044357714",
+          "gid://shopify/Location/68044390482"
+        ]
+      }]
+    }
+  ) {
+    profile { id }
+    userErrors { field message }
+  }
+}

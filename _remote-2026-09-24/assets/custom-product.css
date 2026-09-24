@@ -1,0 +1,102 @@
+/* Custom product section. Colours come from Dawn's colour-scheme variables so it follows theme settings. */
+.cp { --cp-fg: rgb(var(--color-foreground)); --cp-muted: rgba(var(--color-foreground), 0.65); --cp-line: rgba(var(--color-foreground), 0.15); --cp-ok: #0f7b3f; --cp-warn: #a15c00; --cp-err: #b3261e; }
+
+/* Custom elements are display:inline by default, which fragments padding/borders across line boxes. */
+product-page, pincode-checker { display: block; }
+
+.cp__grid { display: grid; gap: 2.4rem; }
+@media screen and (min-width: 990px) {
+  .cp__grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 5rem; align-items: start; }
+  .cp__gallery { position: sticky; top: 2rem; }
+}
+
+/* ---------- Gallery: scroll-snap strip on mobile, single stage + thumbs on desktop ---------- */
+.cp__media-list { display: flex; gap: 1rem; margin: 0; padding: 0; list-style: none; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.cp__media-list::-webkit-scrollbar { display: none; }
+.cp__media { flex: 0 0 100%; scroll-snap-align: start; aspect-ratio: 1; background: rgba(var(--color-foreground), 0.03); border-radius: 1.2rem; overflow: hidden; }
+.cp__media img, .cp__media video, .cp__media .placeholder-svg { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cp__thumbs { display: none; }
+@media screen and (min-width: 750px) {
+  .cp__media-list { overflow: visible; display: block; }
+  .cp__media { display: none; }
+  .cp__media.is-active { display: block; }
+  .cp__thumbs { display: flex; flex-wrap: wrap; gap: 0.8rem; margin: 1.2rem 0 0; padding: 0; list-style: none; }
+  .cp__thumb { width: 7.2rem; height: 7.2rem; padding: 0; border: 1px solid var(--cp-line); border-radius: 0.8rem; overflow: hidden; background: none; cursor: pointer; }
+  .cp__thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .cp__thumb.is-active { border-color: var(--cp-fg); box-shadow: 0 0 0 1px var(--cp-fg); }
+}
+
+/* ---------- Info ---------- */
+.cp__vendor { margin: 0 0 0.4rem; font-size: 1.2rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cp-muted); }
+.cp__title { margin: 0 0 1.2rem; font-size: clamp(2.4rem, 3vw, 3.4rem); line-height: 1.2; }
+.cp__price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.8rem 1.2rem; font-size: 2.2rem; }
+.cp-price__current { font-weight: 600; }
+.cp-price__compare { font-size: 1.6rem; color: var(--cp-muted); }
+.cp-price__badge { font-size: 1.2rem; font-weight: 600; padding: 0.2rem 0.8rem; border-radius: 99px; background: #e8f5ec; color: var(--cp-ok); }
+.cp__tax { margin: 0.4rem 0 0; font-size: 1.3rem; color: var(--cp-muted); }
+.cp__form { margin-top: 2.4rem; }
+
+/* ---------- Variant picker ---------- */
+.cp-variants__group { border: 0; margin: 0 0 2rem; padding: 0; min-width: 0; }
+.cp-variants__legend { padding: 0; margin-bottom: 1rem; font-size: 1.4rem; }
+.cp-variants__selected { font-weight: 600; }
+.cp-variants__values { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+.cp-variants__input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.cp-variants__value {
+  position: relative; display: inline-flex; align-items: center; gap: 0.8rem;
+  min-height: 4.4rem; padding: 0 1.8rem; border: 1px solid var(--cp-line); border-radius: 99px;
+  font-size: 1.4rem; cursor: pointer; transition: border-color 0.15s, background-color 0.15s; user-select: none;
+}
+.cp-variants__value:hover { border-color: var(--cp-fg); }
+.cp-variants__input:checked + .cp-variants__value { border-color: var(--cp-fg); background: var(--cp-fg); color: rgb(var(--color-background)); }
+.cp-variants__input:focus-visible + .cp-variants__value { outline: 2px solid var(--cp-fg); outline-offset: 2px; }
+.cp-variants__dot { width: 2rem; height: 2rem; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18); }
+.cp-variants__input:checked + .cp-variants__value--swatch { background: none; color: var(--cp-fg); box-shadow: 0 0 0 1px var(--cp-fg); }
+
+/* Unavailable: struck through and not clickable (the radio itself is disabled too). */
+.cp-variants__value.is-unavailable { color: var(--cp-muted); cursor: not-allowed; border-style: dashed; }
+.cp-variants__value.is-unavailable .cp-variants__text { text-decoration: line-through; }
+.cp-variants__value.is-unavailable .cp-variants__dot { opacity: 0.35; }
+.cp-variants__value.is-unavailable:hover { border-color: var(--cp-line); }
+
+/* ---------- Meta, quantity, button ---------- */
+.cp__meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem; margin: 0 0 1.6rem; font-size: 1.3rem; color: var(--cp-muted); }
+.cp__stock { font-weight: 600; }
+.cp__stock.is-in { color: var(--cp-ok); }
+.cp__stock.is-low { color: var(--cp-warn); }
+.cp__stock.is-out { color: var(--cp-err); }
+
+.cp__buy { display: flex; gap: 1.2rem; align-items: stretch; }
+.cp__atc { flex: 1; min-height: 4.8rem; position: relative; }
+.cp__atc[disabled] { opacity: 0.55; cursor: not-allowed; }
+.cp__spinner { display: none; width: 1.8rem; height: 1.8rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cp-spin 0.7s linear infinite; }
+.cp__atc.is-loading [data-add-label] { visibility: hidden; }
+.cp__atc.is-loading .cp__spinner { display: block; position: absolute; }
+@keyframes cp-spin { to { transform: rotate(360deg); } }
+.cp__form-error { margin: 1rem 0 0; color: var(--cp-err); font-size: 1.4rem; }
+
+/* ---------- Pincode checker ---------- */
+.pc { margin-top: 2.4rem; padding: 1.6rem; border: 1px solid var(--cp-line); border-radius: 1.2rem; }
+.pc__label { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; font-size: 1.4rem; font-weight: 600; }
+.pc__row { display: flex; gap: 0.8rem; }
+.pc__input { flex: 1; min-width: 0; min-height: 4.4rem; padding: 0 1.4rem; border: 1px solid var(--cp-line); border-radius: var(--inputs-radius, 0.4rem); font-size: 1.6rem; letter-spacing: 0.08em; background: transparent; color: inherit; }
+.pc__input:focus { outline: 2px solid var(--cp-fg); outline-offset: 1px; }
+.pc__input[aria-invalid='true'] { border-color: var(--cp-err); }
+.pc__btn { min-height: 4.4rem; min-width: 9rem; }
+.pc__result { margin-top: 1rem; font-size: 1.4rem; line-height: 1.5; }
+.pc__result.is-success { color: var(--cp-ok); }
+.pc__result.is-error { color: var(--cp-err); }
+.pc__result.is-loading { color: var(--cp-muted); }
+
+/* ---------- Description ---------- */
+.cp__text { margin-top: 2rem; }
+.cp__details { margin-top: 2.4rem; border-top: 1px solid var(--cp-line); padding-top: 1.6rem; }
+.cp__details summary { cursor: pointer; font-weight: 600; font-size: 1.5rem; }
+.cp__details .rte { margin-top: 1.2rem; font-size: 1.4rem; }
+/* Supplier copy is pasted from Word; neutralise its inline indents. */
+.cp__details .rte p { margin: 0 0 0.6rem !important; text-indent: 0 !important; }
+
+@media screen and (max-width: 749px) {
+  .cp__buy { flex-direction: column; }
+  .cp__qty .qty { width: 100%; justify-content: space-between; }
+}
