@@ -34,7 +34,7 @@ async function run(label, viewport) {
   const sizeInput = (v) => page.locator(`fieldset[data-option-index="1"] input[value="${v}"]`);
   const pick = (opt, v) => page.locator(`fieldset[data-option-index="${opt}"] label:has(.cp-variants__text:text-is("${v}"))`).click();
 
-  check(`${label}: initial price`, (await price()).includes('2,310'), await price());
+  check(`${label}: initial price`, (await price()).includes('2,450'), await price());
 
   await pick(0, 'Black');
   check(`${label}: Black / 12 Ltr disabled (sold out)`, await sizeInput('12 Ltr').isDisabled());
@@ -42,7 +42,7 @@ async function run(label, viewport) {
   check(`${label}: White / 18 Ltr disabled (does not exist)`, await sizeInput('18 Ltr').isDisabled());
   await pick(0, 'Silver');
   await pick(1, '18 Ltr');
-  check(`${label}: price updates to 18 Ltr`, (await price()).includes('3,450'), await price());
+  check(`${label}: price updates to 18 Ltr`, (await price()).includes('3,590'), await price());
   check(`${label}: low-stock message`, (await page.locator('[data-stock]').innerText()).includes('Only 1 left'));
   check(`${label}: URL carries variant`, page.url().includes('variant=42753591541842'), page.url());
   await page.screenshot({ path: `${OUT}/${label}-2-silver18.png` });

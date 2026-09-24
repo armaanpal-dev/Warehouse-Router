@@ -5,33 +5,73 @@ It answers "can this pincode get this quantity, and how fast?", allocates stock 
 routes the order to the right warehouse in Shopify, and releases stock on cancellation.
 
 - Node 22.13+ (uses the built-in `node:sqlite`), Express 5. One runtime dependency.
-- Runs with **no Shopify at all** in `mock` mode (the default). The tests use that mode.
-- The same code talks to the real Admin GraphQL API in `token` mode.
+- **Live:** connected to the dev store `another-shpyfy-store.myshopify.com` through a Dev Dashboard app
+  ("Warehouse Router"), receiving real `orders/create` and `orders/cancelled` webhooks from checkout.
+  See [Live results](#live-results-real-checkout-orders).
+- Also runs with **no Shopify at all** in `mock` mode, a documented in-memory Shopify that the tests use.
+
+| `SHOPIFY_MODE` | Talks to | Use |
+|---|---|---|
+| `mock` (default) | In-memory fake Shopify (`src/shopify/mock.js`) | Tests, local demo, reviewers without a store |
+| `token` | Admin GraphQL API over HTTPS with the app's token | Production / the live demo |
+| `cli` | `shopify store execute` using your Shopify CLI login | Dev only, for reading a store without an app |
 
 ## Setup
+
+### Quick start (mock mode, no Shopify needed)
 
 ```bash
 cd backend
 npm install
-cp .env.example .env          # then set SHOPIFY_API_SECRET and ADMIN_API_KEY to long random strings
-npm test                      # 27 tests: routing, availability, webhooks, concurrency, failure handling
-npm start                     # http://127.0.0.1:3000
+cp .env.example .env          # set SHOPIFY_API_SECRET and ADMIN_API_KEY to long random strings
+npm test                      # 29 tests: routing, availability, webhooks, concurrency, failures, regressions
+npm start                     # http://127.0.0.1:3000 (PORT in .env)
 ```
 
-### Against a real store
+### Against a real store (how the live demo is set up)
 
-1. Create an app in the Shopify Dev Dashboard with the scopes `read_products`, `read_inventory`,
-   `read_locations`, `read_orders`, `write_orders`, `read_merchant_managed_fulfillment_orders` and
-   `write_merchant_managed_fulfillment_orders`. Install it on the store.
-2. In `.env`: `SHOPIFY_MODE=token`, `SHOPIFY_SHOP`, `SHOPIFY_ADMIN_TOKEN`, and `SHOPIFY_API_SECRET` = the app's client secret.
-   Webhook HMACs are verified with that secret.
-3. Create the three locations in Shopify (their names must contain Delhi, Bengaluru and Mumbai), then run
-   `npm run sync-locations` and paste the three `WAREHOUSE_*_LOCATION_ID` lines it prints into `.env`.
-4. Subscribe the app to `orders/create` and `orders/cancelled` pointing at `https://<host>/webhooks`
-   (in `shopify.app.toml`, or with `webhookSubscriptionCreate`).
+**1. Create the app** (dev.shopify.com → Apps → Create app). Custom apps can no longer be created in the
+store admin (*Develop apps*) since January 2026, so use the Dev Dashboard.
+- Create a version with these access scopes, then **Release** it:
+  `read_products, read_inventory, read_locations, read_orders, write_orders,
+  read_merchant_managed_fulfillment_orders, write_merchant_managed_fulfillment_orders`
+- **Protected customer data access** → tick **Store management** → Save. Without this, Shopify refuses
+  order webhooks with *"This app is not approved to subscribe to webhook topics containing protected
+  customer data"*. Custom apps don't need review; it applies immediately.
+- **Install** the app on the store. You don't need to choose a distribution for a store in your own organisation.
 
-`SHOPIFY_MODE=cli` is a dev-only shortcut. It runs every call through `shopify store execute` using your
-Shopify CLI login, so you can read a real store without creating an app. Webhook signatures can't be
+**2. Configure `.env`:**
+```ini
+SHOPIFY_MODE=token
+SHOPIFY_SHOP=your-store.myshopify.com
+SHOPIFY_CLIENT_ID=<app client id>
+SHOPIFY_API_SECRET=<app client secret>   # also verifies webhook HMACs
+SHOPIFY_ADMIN_TOKEN=                     # leave blank: the server fetches and renews a token itself
+```
+The server gets its access token with the **client credentials grant** (`POST /admin/oauth/access_token`),
+caches it, refreshes it 5 minutes before expiry, and retries once with a new token on a 401.
+If the grant returns `app_not_installed`, the app isn't installed on the store yet.
+
+**3. Set up the warehouses in Shopify.**
+- Create three locations whose names contain *Delhi*, *Bengaluru* and *Mumbai*.
+- Run `npm run sync-locations` and paste the three `WAREHOUSE_*_LOCATION_ID` lines it prints into `.env`.
+- **Add all three as shipping origins** (Settings → Shipping and delivery → General profile → origins).
+  Otherwise checkout reports stocked items as **"Sold out"**, because no location that holds them can ship.
+
+**4. Expose the server and register the webhooks:**
+```bash
+npm start
+ngrok http 3000                                                    # or any HTTPS tunnel / host
+node scripts/register-webhooks.js https://<your-public-host>       # idempotent; replaces old URLs
+node scripts/register-webhooks.js --list
+```
+Re-run `register-webhooks.js` whenever the public URL changes (e.g. a new ngrok session).
+
+**Hosting.** Any always-on Node host with a persistent disk works (Render, Railway, Fly.io, a VM). Serverless
+platforms such as Vercel are **not** suitable: the retry sweeper, outbox worker and reconciler are
+background loops, and the SQLite ledger needs a disk that persists.
+
+`SHOPIFY_MODE=cli` is a dev-only shortcut: it can read a real store without an app, but webhooks can't be
 real in that mode, so post signed test webhooks with `scripts/send-webhook.js`.
 
 ## Endpoints
@@ -128,8 +168,8 @@ HTTP 422
   "request_id": "b9198d5e-8db0-4392-9e49-953563812d76" }
 ```
 
-**Against the real dev store** (`SHOPIFY_MODE=cli`, live Admin API data from the three Shopify
-locations, 2026-09-24):
+**Against the real dev store** (live Admin API data from the three Shopify locations, 2026-09-24, with the
+original demo stock before the later +2 restock):
 
 | Request | Result |
 |---|---|
@@ -138,7 +178,9 @@ locations, 2026-09-24):
 | Silver / 12 Ltr (`42753591509074`) ×7 → 110001 | `split`: DEL 2 + BOM 5 |
 | Black / 12 Ltr (`42753591607378`) ×1 → 400001 | `available: false`, `OUT_OF_STOCK` |
 
-**Webhook flow**, driven by `scripts/send-webhook.js`, which signs the payload exactly as Shopify does:
+In `token` mode each availability call takes about 0.5–1 s (a live Shopify read), or less when cached.
+
+**Webhook flow in mock mode**, driven by `scripts/send-webhook.js`, which signs the payload exactly as Shopify does:
 
 ```text
 $ node scripts/send-webhook.js create 46001 2 560001
@@ -155,6 +197,35 @@ $ node scripts/send-webhook.js cancel data/order-5000.json
 GET /api/admin/orders/5000   ->  status "cancelled", allocation status "released"
 GET /api/admin/stock/46001   ->  ledger { DEL: 5, BLR: 3, BOM: 4 }
 ```
+
+## Live results: real checkout orders
+
+These orders were placed through the storefront checkout (test payment), delivered to the server by Shopify
+webhooks, allocated, and written back to Shopify.
+
+| Order | Items → pincode | Server decision | In Shopify admin |
+|---|---|---|---|
+| **#1006** | Silver / 8 Ltr ×1 → 110003 (Delhi) | Primary DEL has stock → `allocated`, DEL 1 | Ships from **Delhi Warehouse**, tag `warehouse-DEL` |
+| **#1007** | Silver / 12 Ltr ×7 → 110003 (Delhi) | DEL has only 2 → **split** DEL 2 + BOM 5 | Fulfillment orders at **Delhi (2)** and **Mumbai (5)**, tags `warehouse-DEL`, `warehouse-BOM` |
+
+How to check an order yourself:
+```bash
+curl -H "X-Api-Key: $ADMIN_API_KEY" http://127.0.0.1:3000/api/admin/orders/<shopify order id>
+curl -H "X-Api-Key: $ADMIN_API_KEY" http://127.0.0.1:3000/api/admin/webhooks
+```
+
+**A bug found by #1007, and the fix.** At first the server allocated only 1 of the 7 units and tagged the
+order `allocation-review`. Shopify **commits an order's stock at checkout**, before the webhook is
+sent. So when the server read "available", this order's own 7 units were already missing, and the order
+was competing with itself. In the mock tests every warehouse had spare stock, so it never showed.
+
+The fix (`src/services/orders.js`, `ownCommitments`): before allocating, the server reads the order's own
+fulfillment orders to see where Shopify committed its units. It then counts those units as available *to
+this order*, but only when the ledger is known to contain that commitment: synced from a Shopify read that
+started after the webhook arrived, or safely after the order's `created_at`. A slow, older read can no
+longer overwrite a newer one either (`syncLedger` drops reads that started before the last applied one).
+In doubt it under-counts, never over-counts. Two regression tests reproduce the case, and #1007 was
+re-processed to the correct split.
 
 ## How it works
 
@@ -204,10 +275,17 @@ orders from both being routed to the *same warehouse* for its last unit. That's 
 - **The sync rule.** After we allocate, our ledger is *ahead* of Shopify until the fulfillment-order move
   lands. Any item with a Shopify write still in the outbox (`pending_items`) is not overwritten by
   syncs, so the same unit can't be handed out twice in that window.
-- **Known conservative window.** Between an order's creation and our routing of it, Shopify has
-  committed the stock at *its* chosen location and we have committed it at *ours*. The unit is briefly
-  counted twice. That can undersell for a few seconds; it can never oversell. The next sync after the
-  move removes the double count.
+- **An order never competes with itself.** Shopify commits stock at checkout, so the order's own units
+  are already gone from "available" when the webhook arrives. They're added back for that order only,
+  and only when the ledger provably contains the commitment (see [Live results](#live-results-real-checkout-orders)).
+- **Stale reads can't roll the ledger back.** Each sync records when its Shopify read *started*; a read
+  that started earlier than the last applied one is dropped.
+- **Where it errs, it errs safe.** In the rare cases where it can't be sure (e.g. the ledger is ahead of
+  Shopify because another order's move is in flight), a unit may be counted as taken for a few seconds.
+  That can undersell briefly; it can never oversell. The next sync removes the difference.
+- **Shopify-side guards too.** Stock adjustments by the setup scripts use Shopify's compare-and-set
+  (`changeFromQuantity`) plus an `@idempotent` key, so a concurrent change or a retried request can't
+  apply twice.
 - **Scaling out.** SQLite's write lock covers several processes on one host. For several hosts, move the
   ledger to Postgres: the same conditional `UPDATE` is atomic there, with `SELECT … FOR UPDATE` on the
   stock rows if you need them read first.
@@ -262,7 +340,9 @@ Shopify becomes authoritative again.
 ### Security
 
 - Credentials live only in `.env`, which is git-ignored. Config is validated at boot, and production
-  refuses short secrets.
+  refuses short secrets. The access token is never stored; it's fetched at runtime from the client ID + secret.
+- Least privilege: the app asks only for the scopes above, and for protected customer data it declares
+  only "Store management".
 - Webhooks: HMAC. App proxy: Shopify's `signature` parameter. Admin: `X-Api-Key`. All three are
   checked with `timingSafeEqual`.
 - The public endpoint has a CORS allow-list, a per-IP rate limit, a 16 kB body limit and strict input
@@ -280,7 +360,7 @@ src/
   db.js                schema, transaction()
   middleware.js        request id, CORS, rate limit, API key, app-proxy signature, error handler
   shopify/
-    graphql.js         transports (token / cli) and the retrying client
+    graphql.js         transports (token / cli), client-credentials token, the retrying client
     service.js         the Admin API operations we use
     mock.js            the same interface over an in-memory store
   services/
@@ -291,6 +371,22 @@ src/
     outbox.js          durable Shopify writes with retry
     jobs.js            outbox handlers and the reconciler
     webhooks.js        HMAC, durable intake, dedupe, retry sweeper
-scripts/               send-webhook.js, sync-locations.js
-test/                  node:test suites (run with npm test)
+scripts/
+  register-webhooks.js point orders/create + orders/cancelled at a public URL (idempotent)
+  sync-locations.js    find the warehouse location GIDs for .env
+  send-webhook.js      send correctly signed test webhooks (mock demo, replays)
+test/                  node:test suites, 29 tests (npm test)
+```
+
+Store setup scripts (they created the demo data) are in `../scripts/`:
+`setup-locations.js` (the 3 warehouses), `setup-product.js` (the product and its stock matrix), and
+`add-stock.js` (restock: `node add-stock.js 2` adds 2 units per variant per warehouse).
+
+## Current live state
+
+```
+Store      another-shpyfy-store.myshopify.com (password-protected dev store)
+Product    Precise - Milk Cooler, 8 variants (Silver/Black/White × 8/12/18 Ltr; White/18 Ltr doesn't exist)
+Locations  Delhi Warehouse, Bengaluru Warehouse, Mumbai Warehouse (all shipping origins)
+Webhooks   ORDERS_CREATE, ORDERS_CANCELLED → <public URL>/webhooks
 ```

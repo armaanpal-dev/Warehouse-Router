@@ -18,7 +18,7 @@ for (const [label, viewport] of [['desktop', { width: 1366, height: 900 }], ['mo
   check(`${label}: homepage has the product section`, await page.locator('product-page').count() === 1);
   check(`${label}: title is an h2 link to the product`, (await page.locator('h2.cp__title a').getAttribute('href'))?.includes('/products/precise-milk-cooler'));
   await page.locator('fieldset[data-option-index="1"] label:has(.cp-variants__text:text-is("12 Ltr"))').click();
-  check(`${label}: variant change updates price`, (await page.locator('[data-price]').innerText()).includes('2,890'));
+  check(`${label}: variant change updates price`, (await page.locator('[data-price]').innerText()).includes('2,990'));
   check(`${label}: homepage URL not rewritten`, !page.url().includes('variant='), page.url());
   const resp = page.waitForResponse((r) => r.url().includes('/cart/add.js'));
   await page.locator('[data-add-button]').click();

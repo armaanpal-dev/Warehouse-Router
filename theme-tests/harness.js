@@ -10,10 +10,10 @@ const read = (f) => fs.readFileSync(new URL(f, ASSETS), 'utf8');
 
 // Mirrors the product created by scripts/setup-product.js (White / 18 Ltr intentionally absent).
 export const VARIANTS = [
-  ['42753591476306', 'Silver', '8 Ltr', 231000, 12], ['42753591509074', 'Silver', '12 Ltr', 289000, 8],
-  ['42753591541842', 'Silver', '18 Ltr', 345000, 1], ['42753591574610', 'Black', '8 Ltr', 231000, 4],
-  ['42753591607378', 'Black', '12 Ltr', 289000, 0], ['42753591640146', 'Black', '18 Ltr', 345000, 7],
-  ['42753591672914', 'White', '8 Ltr', 231000, 5], ['42753591705682', 'White', '12 Ltr', 289000, 3],
+  ['42753591476306', 'Silver', '8 Ltr', 245000, 12], ['42753591509074', 'Silver', '12 Ltr', 299000, 8],
+  ['42753591541842', 'Silver', '18 Ltr', 359000, 1], ['42753591574610', 'Black', '8 Ltr', 259900, 4],
+  ['42753591607378', 'Black', '12 Ltr', 319900, 0], ['42753591640146', 'Black', '18 Ltr', 379900, 7],
+  ['42753591672914', 'White', '8 Ltr', 249900, 5], ['42753591705682', 'White', '12 Ltr', 309900, 3],
 ].map(([id, color, size, price, qty]) => ({
   id: Number(id), title: `${color} / ${size}`, options: [color, size], available: qty > 0,
   price, compareAtPrice: 0, sku: 'SKU-' + id.slice(-4), mediaId: null, maxQty: qty,

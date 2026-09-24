@@ -6,7 +6,7 @@ const byTitle = (t) => VARIANTS.find((v) => v.title === t);
 
 test('initial render: price, stock and URL for the selected variant', () => {
   const { $, window } = setup();
-  assert.equal($('[data-price]').textContent.trim(), '₹2,310.00');
+  assert.equal($('[data-price]').textContent.trim(), '₹2,450.00');
   assert.equal($('[data-stock]').textContent, 'In stock');
   assert.equal(new URL(window.location.href).searchParams.get('variant'), String(VARIANTS[0].id));
   assert.equal($('[data-add-button]').disabled, false);
@@ -17,9 +17,18 @@ test('changing size updates price, id, URL and stock message', () => {
   choose(1, '18 Ltr');
   const v = byTitle('Silver / 18 Ltr');
   assert.equal($('[data-variant-input]').value, String(v.id));
-  assert.equal($('[data-price]').textContent.trim(), '₹3,450.00');
+  assert.equal($('[data-price]').textContent.trim(), '₹3,590.00');
   assert.equal($('[data-stock]').textContent, 'Only 1 left');
   assert.equal(new URL(window.location.href).searchParams.get('variant'), String(v.id));
+});
+
+test('changing colour updates price, because every variant has its own price', () => {
+  const { $, choose } = setup();
+  choose(0, 'Black');
+  assert.equal($('[data-variant-input]').value, String(byTitle('Black / 8 Ltr').id));
+  assert.equal($('[data-price]').textContent.trim(), '₹2,599.00');
+  choose(0, 'White');
+  assert.equal($('[data-price]').textContent.trim(), '₹2,499.00');
 });
 
 test('sold-out combination is disabled for the current colour, and labelled for screen readers', () => {

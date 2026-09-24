@@ -18,17 +18,19 @@ The reference product on brewinggadgets.com has a single variant, but the brief 
 `scripts/setup-product.js` created **Precise - Milk Cooler** with the real image and specs, and a
 Colour × Size matrix built to exercise every state:
 
-| | 8 Ltr (₹2,310) | 12 Ltr (₹2,890) | 18 Ltr (₹3,450) |
+| | 8 Ltr | 12 Ltr | 18 Ltr |
 |---|---|---|---|
-| **Silver** | DEL 5 · BLR 3 · BOM 4 | DEL 2 · BOM 6 | BLR 1 (low stock) |
-| **Black** | DEL 4 (fallback demo) | **sold out** | DEL 3 · BLR 2 · BOM 2 |
-| **White** | BLR 5 | 1 · 1 · 1 | **does not exist** |
+| **Silver** | ₹2,450 · DEL 5 · BLR 3 · BOM 4 | ₹2,990 · DEL 2 · BOM 6 | ₹3,590 · BLR 1 (low stock) |
+| **Black** | ₹2,599 · DEL 4 (fallback demo) | ₹3,199 · **sold out** | ₹3,799 · DEL 3 · BLR 2 · BOM 2 |
+| **White** | ₹2,499 · BLR 5 | ₹3,099 · 1 · 1 · 1 | **does not exist** |
 
 That was the starting stock. On 2026-09-24 every variant got **+2 at each warehouse**
-(`node scripts/add-stock.js 2`), after two test orders. So Black / 12 Ltr is no longer sold out; White / 18 Ltr
-still doesn't exist, which demos the "unavailable" state. The live numbers are in Shopify admin → Products.
+(`node scripts/add-stock.js 2`), after two test orders. Later the same day Black / 12 Ltr was zeroed at all three
+warehouses (`node scripts/reprice-and-zero-black.js`), so it is sold out again. White / 18 Ltr still doesn't
+exist, which demos the "unavailable" state. The live numbers are in Shopify admin → Products.
 
-The prices for 12 and 18 Ltr are made up for the demo. Stock is tracked with the inventory policy set to
+Every variant has its own price, so choosing a colour changes the price as well as choosing a size. Only
+₹2,310 (Silver / 8 Ltr, the reference product) was ever a real price; all of these are made up for the demo. Stock is tracked with the inventory policy set to
 `DENY`. Three locations were created: Delhi, Bengaluru and Mumbai Warehouse. The backend's mock uses the
 same matrix, so both demos behave the same way.
 
@@ -112,3 +114,113 @@ colour-scheme variables, so it follows theme settings.
   This run caught two issues, both now fixed. Custom elements default to `display:inline`, which broke
   the layout. And the store's floating video app sat above the drawer; the drawer now uses the maximum
   z-index.
+
+## Task 2 walkthrough
+
+**Files** (all in `backend/`; Node 22.13+, Express 5, built-in `node:sqlite`, one runtime dependency):
+
+| File | Role |
+|---|---|
+| `src/server.js` | Boots the API, starts the background workers (outbox, webhook retry sweeper, reconciler), graceful shutdown |
+| `src/app.js` | Wires the services together and defines the routes: availability, webhooks, admin, health |
+| `src/config.js` | Loads `.env` and validates it at boot (fails fast on missing or weak secrets) |
+| `src/warehouses.js` | The 3 warehouses, pincode → region → primary warehouse + fallback order, delivery days |
+| `src/db.js` | SQLite schema: stock ledger, orders, allocations, webhook events, outbox, discrepancies |
+| `src/services/availability.js` | `POST /api/express-availability`: validation and the response shape |
+| `src/services/allocation.js` | Pure planning: primary → nearest single fallback → split → insufficient |
+| `src/services/inventory.js` | The stock ledger: syncs from Shopify, never lets a stale read roll it back |
+| `src/services/orders.js` | Order allocation and cancellation, the atomic part |
+| `src/services/webhooks.js` | HMAC check, durable intake, duplicate guard, retry sweeper |
+| `src/services/outbox.js` + `jobs.js` | Durable writes back to Shopify (move fulfillment order, tag order, resync) with retries |
+| `src/shopify/graphql.js` | Admin API client: access token via client credentials, retries, rate-limit handling |
+| `src/shopify/service.js` | The Admin GraphQL operations used (variants, inventory levels, fulfillment orders, tags) |
+| `src/shopify/mock.js` | The same interface over an in-memory fake Shopify, for tests and demos without a store |
+| `src/middleware.js` | Request id, CORS allow-list, rate limit, admin API key, app-proxy signature, error handler |
+| `scripts/register-webhooks.js` | Points `orders/create` + `orders/cancelled` at the public URL (idempotent) |
+
+**Checking inventory by warehouse (req. 8).** `POST /api/express-availability` takes the brief's exact
+body, `{ "variant_id", "quantity", "pincode" }`. It validates every field (400 with per-field
+details), reads the variant's stock at each warehouse from Shopify, and answers with whether it's
+available, whether it's express, which warehouse ships, the allocation per warehouse and the delivery
+days. "Not enough stock" is a valid answer, so it returns 200 with `available: false` and the maximum
+available quantity, not an error.
+
+**Pincode → warehouse (req. 9).** Indian pincodes encode geography in their first digits, so
+`warehouses.js` maps 2-digit prefix ranges to a region, a **primary** warehouse, and a **fallback order**
+ranked by distance: `11xxxx` Delhi → DEL, BOM, BLR; `56xxxx` Karnataka → BLR, BOM, DEL; `40xxxx`
+Maharashtra → BOM, BLR, DEL, and so on for all regions. The warehouse's own city (`110`, `560-562`,
+`400-401`) gets next-day delivery; the rest of its region 2–3 days; any fallback 4–6 days. Pincodes
+outside every region (e.g. `9xxxxx`, Army Post Office) return 422 `PINCODE_NOT_SERVICEABLE`.
+
+**Enough stock for the variant and quantity? (req. 10).** Stock comes live from Shopify's inventory
+levels per location (cached 10 s) and is kept in a local ledger. For a real order, the server also reads
+where Shopify reserved *that order's* units at checkout and counts them as the order's own. Without that
+step an order competes with its own reservation; live order #1007 exposed this bug, and it's fixed and
+covered by regression tests.
+
+**Fallback logic (req. 11).** A pure function in `allocation.js`, used for both the availability check
+and real orders:
+1. The **primary** warehouse, if it has the full quantity: one parcel, express.
+2. Otherwise the **nearest fallback that has the full quantity**: one parcel. This beats a split that
+   includes the primary, because the customer gets one delivery and the merchant pays for one label.
+3. Otherwise a **split** across warehouses in distance order.
+4. Otherwise **insufficient**: an order allocates what it can and is tagged `allocation-review`.
+
+**Shopify Admin API integration (req. 12).** A Dev Dashboard app ("Warehouse Router") gives the server
+its access. The server fetches its own token (client credentials grant), caches it, renews it before
+expiry and retries once on a 401. It reads product variants and their inventory items, locations, and
+available quantity per location (`productVariant`, `inventoryLevels`, `locations`). It writes back by
+moving fulfillment orders to the chosen warehouse (`fulfillmentOrderMove`) and tagging orders
+(`tagsAdd`). The same interface is implemented by `mock.js`, so everything also runs without a store.
+
+**Webhooks for order creation and cancellation (req. 13).**
+- **Order created:** verify the HMAC and the shop → store the event and reply 200 immediately (Shopify
+  retries anything slower than 5 s) → allocate stock per warehouse → queue the Shopify writes → the
+  order moves to the chosen warehouse and gets tagged `warehouse-DEL` / `-BLR` / `-BOM`.
+- **Order cancelled:** unfulfilled units go back to the warehouse they were reserved at, any pending move
+  is dropped, and stock is re-read from Shopify. Already-shipped lines stay consumed.
+- **Cancel arriving before create** (Shopify doesn't guarantee order): a tombstone is recorded and the
+  late create is ignored.
+
+**Concurrency, duplicates, API failures, discrepancies (req. 14).**
+- **Concurrent orders:** every order is allocated inside one `BEGIN IMMEDIATE` transaction with no network
+  call inside it, and every decrement is conditional (`available = available - n WHERE available >= n`).
+  Two orders can't take the same last unit, and stock never goes negative.
+- **Duplicate webhooks:** the webhook id is a primary key, so a redelivery is acknowledged and dropped. A
+  second guard on the Shopify order id stops a replay under a new webhook id.
+- **Stale data:** a Shopify read that started before the last applied one is discarded, and items with
+  Shopify writes still in flight aren't overwritten by syncs.
+- **API failures:** the client retries network errors, 5xx, 429 and GraphQL `THROTTLED`, with backoff.
+  Shopify writes go through a **transactional outbox**, retried for up to 8 attempts, and are visible at
+  `/api/admin/outbox` if they die. Failed webhook events are retried by a sweeper. If Shopify is down,
+  availability serves the ledger if it's under 5 minutes old (flagged `inventory_source: "cache"`),
+  otherwise 503.
+- **Discrepancies:** every 5 minutes (or on demand at `/api/admin/reconcile`) the ledger is compared with
+  Shopify. Each difference (POS sale, stock count, manual edit) is logged in `discrepancies` and
+  corrected to Shopify's number.
+
+**Security and errors (req. 15).** Credentials live only in `.env`, which is git-ignored; the access
+token is never stored. Webhooks are verified by HMAC over the raw body, the app-proxy route by Shopify's
+signature, and admin routes by `X-Api-Key`, all compared in constant time. The public endpoint has a CORS
+allow-list, a per-IP rate limit and a 16 kB body limit. Every error has one shape,
+`{ error: { code, message, details? }, request_id }`: 400 validation / invalid JSON, 401 bad signature
+or key, 403 unknown shop, 404 unknown variant, 422 unserviceable pincode, 429 rate limited, 502 / 503
+Shopify errors. Stack traces are never sent to the client.
+
+**Live setup.** The store has 3 locations (Delhi, Bengaluru, Mumbai Warehouse), all set up as shipping
+origins, holding the product's per-variant stock. The app is installed with the scopes `read_products,
+read_inventory, read_locations, read_orders, write_orders, read/write_merchant_managed_fulfillment_orders`
+and "Store management" protected customer data. The webhooks point at the server through an HTTPS
+tunnel (`scripts/register-webhooks.js`). Full setup steps are in [backend/README.md](backend/README.md).
+
+**Verification**
+- `cd backend && npm install && npm test`: **29 tests** cover pincode routing, availability, fallback and
+  split, validation and error codes, HMAC and shop checks, duplicate webhooks, **8 simultaneous orders for
+  1 unit → exactly 1 allocated**, **20 orders against 12 units → exactly 12, filled BLR → BOM → DEL**,
+  cancel-before-create, Shopify outages with retries, reconciliation, and the #1007 regression.
+- Live availability calls against the store's real stock: express from Bengaluru, fallback to Delhi,
+  a Delhi + Mumbai split, and out of stock all answered correctly.
+- **Real checkout orders** delivered by Shopify webhooks: **#1006** (110003) → routed to Delhi Warehouse,
+  tagged `warehouse-DEL`. **#1007** (7 units to 110003, Delhi had 2) → split Delhi 2 + Mumbai 5 in
+  Shopify, tagged `warehouse-DEL` + `warehouse-BOM`.
+- Sample requests and responses for every case are in [backend/README.md](backend/README.md#sample-requests-and-responses).

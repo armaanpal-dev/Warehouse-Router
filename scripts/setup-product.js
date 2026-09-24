@@ -9,7 +9,12 @@ const SOURCE = 'https://brewinggadgets.com/products/precise-milk-cooler-8-ltr.js
 const ONLINE_STORE = 'gid://shopify/Publication/92317745234';
 const LOC = JSON.parse(fs.readFileSync(path.join(__dirname, 'locations.json'), 'utf8'));
 
-const PRICES = { '8 Ltr': '2310.00', '12 Ltr': '2890.00', '18 Ltr': '3450.00' };
+// Every variant has its own price, so a colour change moves the price as well as a size change (repriced 2026-09-24).
+const PRICES = {
+  'Silver / 8 Ltr': '2450.00', 'Silver / 12 Ltr': '2990.00', 'Silver / 18 Ltr': '3590.00',
+  'Black / 8 Ltr': '2599.00', 'Black / 12 Ltr': '3199.00', 'Black / 18 Ltr': '3799.00',
+  'White / 8 Ltr': '2499.00', 'White / 12 Ltr': '3099.00',
+};
 // [color, size, DEL, BLR, BOM] — matches backend/src/shopify/mock.js so both demos tell the same story.
 const MATRIX = [
   ['Silver', '8 Ltr', 5, 3, 4], ['Silver', '12 Ltr', 2, 0, 6], ['Silver', '18 Ltr', 0, 1, 0],
@@ -50,7 +55,7 @@ const tmp = (name, body) => { const p = path.join(__dirname, '.tmp-' + name); fs
 
   const variants = MATRIX.map(([color, size, del, blr, bom]) => ({
     optionValues: [{ optionName: 'Color', name: color }, { optionName: 'Size', name: size }],
-    price: PRICES[size],
+    price: PRICES[`${color} / ${size}`],
     inventoryPolicy: 'DENY',
     inventoryItem: { sku: SKU(color, size), tracked: true, requiresShipping: true },
     inventoryQuantities: [
