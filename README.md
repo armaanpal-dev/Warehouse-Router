@@ -4,7 +4,7 @@
 |---|---|---|
 | Task 1 | Custom product page, variant picker, pincode checker, AJAX cart drawer | `theme/` → pushed as the unpublished theme **"Senior Assessment" #131486187602** |
 | Task 1 tests | 17 headless tests of the real theme JS (jsdom + a fake Cart API) | `theme-tests/` |
-| Task 2 | Multi-warehouse availability + allocation API, webhooks, outbox, reconciliation | `backend/`. See **[backend/README.md](backend/README.md)** |
+| Task 2 | Multi-warehouse availability + allocation API, webhooks, outbox, reconciliation. **Live** on the store via the Dev Dashboard app "Warehouse Router"; real checkout orders routed (#1006 → Delhi, #1007 → split Delhi 2 + Mumbai 5). 29 tests | `backend/`. See **[backend/README.md](backend/README.md)** |
 | Store setup | Scripts that created the warehouses and the demo product | `scripts/` |
 
 Store: `another-shpyfy-store.myshopify.com` (a password-protected dev store).
@@ -24,6 +24,10 @@ Colour × Size matrix built to exercise every state:
 | **Black** | DEL 4 (fallback demo) | **sold out** | DEL 3 · BLR 2 · BOM 2 |
 | **White** | BLR 5 | 1 · 1 · 1 | **does not exist** |
 
+That was the starting stock. On 2026-09-24 every variant got **+2 at each warehouse**
+(`node scripts/add-stock.js 2`), after two test orders. So Black / 12 Ltr is no longer sold out; White / 18 Ltr
+still doesn't exist, which demos the "unavailable" state. The live numbers are in Shopify admin → Products.
+
 The prices for 12 and 18 Ltr are made up for the demo. Stock is tracked with the inventory policy set to
 `DENY`. Three locations were created: Delhi, Bengaluru and Mumbai Warehouse. The backend's mock uses the
 same matrix, so both demos behave the same way.
@@ -42,6 +46,7 @@ same matrix, so both demos behave the same way.
 | `assets/custom-product.js` | `<product-page>`, `<quantity-stepper>`, `<pincode-checker>` custom elements |
 | `assets/custom-cart.js` | `<cart-drawer-custom>` + `window.CustomCart` (add / change / setAttributes / refresh) |
 | `templates/product.custom.json` | The template the product uses (`templateSuffix: custom`) |
+| `templates/index.json` | Homepage: a placeholder image banner linking to the product. The Custom product section also has a *Product* setting, so it can be placed on any page |
 
 **Variant selection.** Variant data is emitted as JSON from Liquid, including stock (`maxQty`) only
 where it's meaningful (tracked + deny). Each option is judged against the options *before* it: Size
